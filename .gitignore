@@ -21,6 +21,12 @@ bld/
 [Ll]og/
 [Ll]ogs/
 
+## Binaries (build outputs belong under bin/ and obj/, which are ignored above)
+*.exe
+*.dll
+*.pdb
+*.cache
+
 ## OS
 Thumbs.db
 Desktop.ini

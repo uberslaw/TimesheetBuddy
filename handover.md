@@ -72,6 +72,7 @@ Requires [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) on Win
 |------|----------|
 | `%LocalAppData%\TimesheetBuddy\settings.json` | Job codes, favorites, categories, prompt prefs, window position, all time entries, active session |
 | `%LocalAppData%\TimesheetBuddy\day-notes-yyyyMMdd.txt` | Per-day free-text notes from the day log |
+| `%LocalAppData%\TimesheetBuddy\crash.log` | Unhandled exceptions. Startup failures also show a dialog with this path |
 
 Defaults seed a few job codes (`ADMIN`, `DEV`, `MTG`, `SUP`) and sample favorites on first launch.
 

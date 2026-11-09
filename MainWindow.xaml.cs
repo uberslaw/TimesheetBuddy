@@ -60,10 +60,10 @@ public partial class MainWindow : Window
 
     private void PlaceWindow()
     {
-        if (!double.IsNaN(_state.Settings.WindowLeft) && !double.IsNaN(_state.Settings.WindowTop))
+        if (IsSavedPosition(_state.Settings.WindowLeft, _state.Settings.WindowTop))
         {
-            Left = _state.Settings.WindowLeft;
-            Top = _state.Settings.WindowTop;
+            Left = _state.Settings.WindowLeft!.Value;
+            Top = _state.Settings.WindowTop!.Value;
             return;
         }
 
@@ -71,6 +71,11 @@ public partial class MainWindow : Window
         Left = work.Right - Width - 12;
         Top = work.Bottom - Height - 12;
     }
+
+    private static bool IsSavedPosition(double? left, double? top) =>
+        left is double x && top is double y &&
+        !double.IsNaN(x) && !double.IsNaN(y) &&
+        !double.IsInfinity(x) && !double.IsInfinity(y);
 
     private void ReloadSelectors()
     {
