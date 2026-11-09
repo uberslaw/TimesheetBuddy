@@ -1,0 +1,121 @@
+﻿<Window x:Class="TimesheetBuddy.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Timesheet Buddy 3.0"
+        WindowStyle="None"
+        ResizeMode="CanMinimize"
+        ShowInTaskbar="True"
+        Background="{StaticResource BgBrush}"
+        AllowsTransparency="False"
+        Topmost="True"
+        Loaded="Window_Loaded"
+        Closing="Window_Closing"
+        LocationChanged="Window_LocationChanged"
+        MouseLeftButtonDown="Window_MouseLeftButtonDown">
+    <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="1" Background="{StaticResource BgBrush}">
+        <DockPanel Margin="8">
+            <!-- Title bar -->
+            <Grid DockPanel.Dock="Top" Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock FontWeight="SemiBold" FontSize="13" Text="Timesheet Buddy 3.0"
+                               Foreground="{StaticResource InkBrush}" VerticalAlignment="Center"/>
+                    <ToggleButton x:Name="PinToggle" Margin="8,0,0,0" Padding="8,2"
+                                  Content="📌 Pin" ToolTip="Keep window always on top"
+                                  Checked="PinToggle_Changed" Unchecked="PinToggle_Changed"
+                                  Background="{StaticResource AccentSoftBrush}"
+                                  BorderBrush="{StaticResource LineBrush}"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Style="{StaticResource GhostButton}" Content="⚙" ToolTip="Settings"
+                            Click="Settings_Click" FontSize="14" Padding="6,0"/>
+                    <Button Style="{StaticResource GhostButton}" Content="⏱" ToolTip="Today's log"
+                            Click="DayLog_Click" FontSize="14" Padding="6,0"/>
+                    <Button Style="{StaticResource GhostButton}" Content="—" ToolTip="Minimize"
+                            Click="Minimize_Click" FontSize="14" Padding="6,0"/>
+                    <Button Style="{StaticResource GhostButton}" Content="✕" ToolTip="Close"
+                            Click="Close_Click" FontSize="12" Padding="6,0"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- Timer -->
+            <Border DockPanel.Dock="Top" Background="{StaticResource AccentSoftBrush}"
+                    CornerRadius="6" Padding="10,6" Margin="0,0,0,6">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock x:Name="ActiveTaskText" FontWeight="SemiBold" FontSize="13"
+                                   Text="No active task" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock x:Name="ActiveCodeText" Foreground="{StaticResource MutedBrush}"
+                                   FontSize="11" Text="—"/>
+                    </StackPanel>
+                    <TextBlock Grid.Column="1" x:Name="TimerText"
+                               FontFamily="Consolas, Cascadia Mono, Courier New"
+                               FontSize="22" FontWeight="Bold"
+                               Foreground="{StaticResource TimerBrush}"
+                               VerticalAlignment="Center" Margin="12,0,0,0"
+                               Text="00:00:00"/>
+                </Grid>
+            </Border>
+
+            <!-- Controls -->
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="8"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Row="0" Grid.Column="0">
+                    <TextBlock Text="Job code" Foreground="{StaticResource MutedBrush}" FontSize="10" Margin="0,0,0,2"/>
+                    <ComboBox x:Name="JobCodeCombo" DisplayMemberPath="Display"
+                              SelectionChanged="JobCodeCombo_SelectionChanged"/>
+                </StackPanel>
+
+                <StackPanel Grid.Row="0" Grid.Column="2">
+                    <TextBlock Text="Category" Foreground="{StaticResource MutedBrush}" FontSize="10" Margin="0,0,0,2"/>
+                    <ComboBox x:Name="CategoryCombo" IsEditable="True"/>
+                </StackPanel>
+
+                <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,6,0,0">
+                    <TextBlock Text="Task name" Foreground="{StaticResource MutedBrush}" FontSize="10" Margin="0,0,0,2"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <ComboBox x:Name="TaskNameCombo" IsEditable="True"
+                                  KeyDown="TaskNameCombo_KeyDown"/>
+                        <Button Grid.Column="1" Style="{StaticResource PrimaryButton}"
+                                Content="Start" Margin="6,0,0,0" Padding="12,4"
+                                Click="Start_Click"/>
+                        <Button Grid.Column="2" Style="{StaticResource CompactButton}"
+                                Content="Stop" Margin="4,0,0,0" Padding="10,4"
+                                Click="Stop_Click"/>
+                    </Grid>
+                </StackPanel>
+
+                <DockPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,8,0,0">
+                    <Button DockPanel.Dock="Right" Style="{StaticResource CompactButton}"
+                            Content="+ Quick add" Click="QuickAdd_Click" Padding="10,3"/>
+                    <TextBlock x:Name="StatusText" VerticalAlignment="Center"
+                               Foreground="{StaticResource MutedBrush}" FontSize="11"
+                               TextTrimming="CharacterEllipsis"
+                               Text="Idle — pick a job code or task to start"/>
+                </DockPanel>
+            </Grid>
+        </DockPanel>
+    </Border>
+</Window>

@@ -1,0 +1,109 @@
+<Window x:Class="TimesheetBuddy.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Settings — Timesheet Buddy 3.0"
+        Height="560" Width="720"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource BgBrush}">
+    <DockPanel Margin="14">
+        <DockPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
+            <TextBlock VerticalAlignment="Center" Foreground="{StaticResource MutedBrush}" FontSize="11"
+                       Text="Settings are saved to your local AppData folder."/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Style="{StaticResource CompactButton}" Content="Cancel" Width="90" Margin="0,0,8,0"
+                        IsCancel="True" Click="Cancel_Click"/>
+                <Button Style="{StaticResource PrimaryButton}" Content="Save" Width="90"
+                        IsDefault="True" Click="Save_Click"/>
+            </StackPanel>
+        </DockPanel>
+
+        <TabControl x:Name="Tabs">
+            <TabItem Header="Job codes">
+                <DockPanel Margin="10">
+                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
+                        <Button Style="{StaticResource CompactButton}" Content="Add row" Click="AddJobCode_Click"/>
+                        <Button Style="{StaticResource CompactButton}" Content="Remove selected" Margin="8,0,0,0"
+                                Click="RemoveJobCode_Click"/>
+                    </StackPanel>
+                    <DataGrid x:Name="JobCodesGrid"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              HeadersVisibility="Column"
+                              GridLinesVisibility="Horizontal"
+                              BorderBrush="{StaticResource LineBrush}">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Code" Binding="{Binding Code}" Width="120"/>
+                            <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="*"/>
+                            <DataGridCheckBoxColumn Header="Active" Binding="{Binding IsActive}" Width="70"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem x:Name="FavoritesTab" Header="Favorite tasks">
+                <DockPanel Margin="10">
+                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
+                        <Button Style="{StaticResource CompactButton}" Content="Add favorite" Click="AddFavorite_Click"/>
+                        <Button Style="{StaticResource CompactButton}" Content="Remove selected" Margin="8,0,0,0"
+                                Click="RemoveFavorite_Click"/>
+                    </StackPanel>
+                    <DataGrid x:Name="FavoritesGrid"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              HeadersVisibility="Column"
+                              GridLinesVisibility="Horizontal"
+                              BorderBrush="{StaticResource LineBrush}">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Task name" Binding="{Binding Name}" Width="*"/>
+                            <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="140"/>
+                            <DataGridComboBoxColumn x:Name="FavoriteJobCodeColumn"
+                                                    Header="Job code"
+                                                    SelectedValueBinding="{Binding JobCodeId, UpdateSourceTrigger=PropertyChanged}"
+                                                    SelectedValuePath="Id"
+                                                    DisplayMemberPath="Display"
+                                                    Width="200"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="Categories">
+                <DockPanel Margin="10">
+                    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,8"
+                               Foreground="{StaticResource MutedBrush}"
+                               Text="One category per line. Used when starting tasks and filtering favorites."/>
+                    <TextBox x:Name="CategoriesBox" AcceptsReturn="True" TextWrapping="Wrap"
+                             VerticalScrollBarVisibility="Auto" FontFamily="Consolas, Cascadia Mono"/>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="Prompts &amp; pin">
+                <StackPanel Margin="10">
+                    <CheckBox x:Name="AlwaysOnTopCheck" Content="Pin window always on top" Margin="0,0,0,12"/>
+
+                    <TextBlock FontWeight="SemiBold" Text="Still-working recheck" Margin="0,0,0,6"/>
+                    <CheckBox x:Name="RecheckEnabledCheck" Content="Ask me if I'm still on the active task" Margin="0,0,0,8"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                        <TextBlock Text="Default interval:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <ComboBox x:Name="RecheckHours" Width="70"/>
+                        <TextBlock Text="hours" VerticalAlignment="Center" Margin="6,0,12,0"/>
+                        <ComboBox x:Name="RecheckMinutes" Width="70"/>
+                        <TextBlock Text="minutes" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                    </StackPanel>
+
+                    <TextBlock FontWeight="SemiBold" Text="15-minute catch-up" Margin="0,0,0,6"/>
+                    <CheckBox x:Name="FifteenEnabledCheck"
+                              Content="Show “What have you done for the last X minutes?” popup"
+                              Margin="0,0,0,8"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Interval:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <ComboBox x:Name="FifteenMinutes" Width="80"/>
+                        <TextBlock Text="minutes (popup stays until you respond)"
+                                   VerticalAlignment="Center" Margin="8,0,0,0"
+                                   Foreground="{StaticResource MutedBrush}"/>
+                    </StackPanel>
+                </StackPanel>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>
