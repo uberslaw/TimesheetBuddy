@@ -30,6 +30,8 @@
                                   BorderBrush="{StaticResource LineBrush}"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button x:Name="AppMenuButton" Style="{StaticResource GhostButton}" Content="Menu"
+                            ToolTip="Weeks and export" Click="Menu_Click" FontSize="12" Padding="6,0"/>
                     <Button Style="{StaticResource GhostButton}" Content="+" ToolTip="Add manual entry"
                             Click="AddManual_Click" FontSize="16" FontWeight="SemiBold" Padding="8,0"/>
                     <Button Style="{StaticResource GhostButton}" Content="⚙" ToolTip="Settings"

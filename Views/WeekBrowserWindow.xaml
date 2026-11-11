@@ -1,0 +1,174 @@
+<Window x:Class="TimesheetBuddy.Views.WeekBrowserWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Weeks — Timesheet Buddy 3.0"
+        Height="680" Width="1000"
+        MinHeight="480" MinWidth="800"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource BgBrush}">
+    <DockPanel Margin="14">
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+            <TextBlock FontSize="16" FontWeight="SemiBold" Text="Weeks"/>
+            <TextBlock Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,2,0,0"
+                       Text="Each row is Monday through Friday. The task count and hours include Saturday and Sunday when time was logged. Previous and Next move through stored weeks without changing the checkboxes. Check any weeks to export them together, or leave them unchecked to export the week open on the right."/>
+        </StackPanel>
+
+        <DockPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button Style="{StaticResource PrimaryButton}" Content="Export PDF" MinWidth="110" Margin="0,0,8,0"
+                        Click="ExportPdf_Click"/>
+                <Button Style="{StaticResource PrimaryButton}" Content="Export Excel" MinWidth="120" Margin="0,0,8,0"
+                        Click="ExportExcel_Click"/>
+                <Button Style="{StaticResource CompactButton}" Content="Close" MinWidth="90" IsCancel="True"/>
+            </StackPanel>
+            <TextBlock x:Name="ExportHint" VerticalAlignment="Center" TextWrapping="Wrap"
+                       Foreground="{StaticResource MutedBrush}" Margin="0,0,12,0"/>
+        </DockPanel>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="340"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <DockPanel Grid.Column="0">
+                <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="PreviousButton" Grid.Column="0" Style="{StaticResource CompactButton}"
+                            Content="← Previous" Click="Previous_Click" HorizontalAlignment="Left"
+                            ToolTip="Open the older week"/>
+                    <TextBlock x:Name="PositionText" Grid.Column="1" VerticalAlignment="Center" Margin="8,0"
+                               Foreground="{StaticResource MutedBrush}" FontSize="11"/>
+                    <Button x:Name="NextButton" Grid.Column="2" Style="{StaticResource CompactButton}"
+                            Content="Next →" Click="Next_Click" HorizontalAlignment="Right"
+                            ToolTip="Open the newer week"/>
+                </Grid>
+
+                <ListBox x:Name="WeekList"
+                         SelectionChanged="WeekList_SelectionChanged"
+                         BorderBrush="{StaticResource LineBrush}"
+                         Background="{StaticResource PanelBrush}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="Padding" Value="6,4"/>
+                            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border x:Name="Row"
+                                                Background="{TemplateBinding Background}"
+                                                BorderBrush="Transparent"
+                                                BorderThickness="1"
+                                                CornerRadius="4"
+                                                Margin="0,0,0,4"
+                                                Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource LineBrush}"/>
+                                            </Trigger>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="Row" Property="Background" Value="{StaticResource AccentSoftBrush}"/>
+                                                <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <DockPanel LastChildFill="True">
+                                <CheckBox DockPanel.Dock="Left"
+                                          VerticalAlignment="Center"
+                                          Margin="0,0,8,0"
+                                          IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                          ToolTip="Include this week in the export"
+                                          PreviewMouseLeftButtonDown="WeekCheck_PreviewMouseDown"/>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Label}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Summary}" Foreground="{StaticResource MutedBrush}"
+                                               FontSize="11" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+
+            <Border Grid.Column="2" Background="{StaticResource PanelBrush}"
+                    BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="6" Padding="12">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                        <TextBlock x:Name="OpenLabel" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                        <TextBlock x:Name="OpenSummary" Foreground="{StaticResource MutedBrush}" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <ItemsControl x:Name="DayList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,0,0,12">
+                                        <TextBlock Text="{Binding Heading}" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{Binding EmptyMessage}" Foreground="{StaticResource MutedBrush}"
+                                                   FontSize="11" Margin="0,2,0,0">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Style.Triggers>
+                                                        <Trigger Property="Text" Value="">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                        </Trigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <ItemsControl ItemsSource="{Binding Tasks}" Margin="0,4,0,0">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Background="{StaticResource BgBrush}"
+                                                            BorderBrush="{StaticResource LineBrush}"
+                                                            BorderThickness="1" CornerRadius="4"
+                                                            Padding="8,6" Margin="0,0,0,4">
+                                                        <StackPanel>
+                                                            <DockPanel LastChildFill="True">
+                                                                <TextBlock DockPanel.Dock="Right" Text="{Binding TimeDisplay}"
+                                                                           FontFamily="Consolas, Cascadia Mono, Courier New"
+                                                                           Foreground="{StaticResource MutedBrush}" Margin="8,0,0,0"/>
+                                                                <TextBlock Text="{Binding TaskName}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                                            </DockPanel>
+                                                            <TextBlock Text="{Binding Meta}" Foreground="{StaticResource MutedBrush}"
+                                                                       FontSize="11" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                                                            <TextBlock Text="{Binding Notes}" TextWrapping="Wrap" FontStyle="Italic" Margin="0,4,0,0">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Style.Triggers>
+                                                                            <Trigger Property="Text" Value="">
+                                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                                            </Trigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+        </Grid>
+    </DockPanel>
+</Window>

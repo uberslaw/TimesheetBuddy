@@ -1,6 +1,7 @@
 ﻿using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Threading;
 using TimesheetBuddy.Models;
@@ -260,6 +261,23 @@ public partial class MainWindow : Window
     private void DayLog_Click(object sender, RoutedEventArgs e)
     {
         var win = new DayLogWindow { Owner = this };
+        win.ShowDialog();
+    }
+
+    private void Menu_Click(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu();
+        var weeks = new MenuItem { Header = "Weeks & export…" };
+        weeks.Click += (_, _) => OpenWeekBrowser();
+        menu.Items.Add(weeks);
+        menu.PlacementTarget = sender as UIElement;
+        menu.Placement = PlacementMode.Bottom;
+        menu.IsOpen = true;
+    }
+
+    private void OpenWeekBrowser()
+    {
+        var win = new WeekBrowserWindow { Owner = this };
         win.ShowDialog();
     }
 
