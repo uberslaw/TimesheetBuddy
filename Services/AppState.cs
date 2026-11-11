@@ -225,6 +225,73 @@ public sealed class AppState : INotifyPropertyChanged
         Persist();
     }
 
+    public void SetJobCodeViewIds(IReadOnlyList<Guid> orderedIds)
+    {
+        _settings.JobCodeViewIds = orderedIds.Distinct().ToList();
+        Persist();
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public JobCode? AddJobCode(string code, string description)
+    {
+        var trimmed = code.Trim();
+        if (trimmed.Length == 0)
+            return null;
+        if (JobCodes.Any(existing => string.Equals(existing.Code, trimmed, StringComparison.OrdinalIgnoreCase)))
+            return null;
+
+        var created = new JobCode
+        {
+            Code = trimmed,
+            Description = description.Trim(),
+            IsActive = true
+        };
+
+        var next = JobCodes.Select(existing => new JobCode
+        {
+            Id = existing.Id,
+            Code = existing.Code,
+            Description = existing.Description,
+            IsActive = existing.IsActive
+        }).ToList();
+        next.Add(created);
+        ReplaceJobCodes(next);
+        return created;
+    }
+
+    public bool ApplyScreenLockChoice(
+        LockIntervalSplit.Snapshot snapshot,
+        DateTime unlockedAtUtc,
+        LockIntervalSplit.Choice choice,
+        JobCode? targetCode)
+    {
+        var result = LockIntervalSplit.Apply(
+            _settings.Entries,
+            ActiveSession,
+            snapshot,
+            unlockedAtUtc,
+            choice,
+            targetCode);
+
+        if (!result.Applied)
+            return false;
+
+        if (result.ContinuedSession is not null)
+        {
+            ActiveSession = result.ContinuedSession;
+            Tick();
+            StatusText = $"Tracking: {ActiveTaskLabel}";
+        }
+
+        if (result.Mutated)
+        {
+            RefreshToday();
+            Persist();
+        }
+
+        return true;
+    }
+
     public void ReplaceJobCodes(IEnumerable<JobCode> codes)
     {
         _settings.JobCodes = codes.Select(c => new JobCode

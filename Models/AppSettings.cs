@@ -22,6 +22,12 @@ public sealed class AppSettings
     ];
     public List<TimeEntry> Entries { get; set; } = [];
     public ActiveSession? ActiveSession { get; set; }
+
+    /// <summary>
+    /// Ordered job-code ids shown in the job-code view.
+    /// Null means the view has not been customized and should list active codes.
+    /// </summary>
+    public List<Guid>? JobCodeViewIds { get; set; }
 }
 
 public sealed class ActiveSession

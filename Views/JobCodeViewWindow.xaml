@@ -1,0 +1,131 @@
+<Window x:Class="TimesheetBuddy.Views.JobCodeViewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Job codes — Timesheet Buddy"
+        Height="560" Width="460"
+        MinHeight="360" MinWidth="380"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource BgBrush}">
+    <DockPanel Margin="14">
+        <Grid DockPanel.Dock="Top" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Margin="0,0,8,0">
+                <TextBlock FontSize="16" FontWeight="SemiBold" Text="Job codes"/>
+                <TextBlock Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,2,0,0"
+                           Text="Click a code to run the timer. Remove only hides that row — saved time stays."/>
+            </StackPanel>
+            <Button Grid.Column="1" Style="{StaticResource CompactButton}" Content="Compact tracker"
+                    VerticalAlignment="Top" Click="Compact_Click" ToolTip="Back to the compact tracker"/>
+        </Grid>
+
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource PanelBrush}"
+                BorderBrush="{StaticResource LineBrush}" BorderThickness="1"
+                CornerRadius="6" Padding="12,10" Margin="0,10,0,0">
+            <DockPanel>
+                <Button x:Name="StopButton" DockPanel.Dock="Right" Style="{StaticResource PrimaryButton}"
+                        Content="Stop" MinWidth="88" Click="Stop_Click" ToolTip="Stop the active timer"/>
+                <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                    <TextBlock Foreground="{StaticResource MutedBrush}" FontSize="11" Text="Today"/>
+                    <TextBlock x:Name="TodayTotalText" FontFamily="Consolas, Cascadia Mono, Courier New"
+                               FontSize="18" FontWeight="Bold" Foreground="{StaticResource TimerBrush}"
+                               Text="00:00:00"/>
+                    <TextBlock Foreground="{StaticResource MutedBrush}" FontSize="11"
+                               Text="All time logged today"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+            <Button Style="{StaticResource CompactButton}" Content="Add code" Click="Add_Click"
+                    ToolTip="Add an existing job code or create a new one"/>
+        </StackPanel>
+
+        <Grid>
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl x:Name="RowsList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Margin="0,0,0,6" CornerRadius="6" Padding="10,8" Cursor="Hand"
+                                    MouseLeftButtonUp="Row_MouseLeftButtonUp">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Background" Value="{StaticResource PanelBrush}"/>
+                                        <Setter Property="BorderBrush" Value="{StaticResource LineBrush}"/>
+                                        <Setter Property="BorderThickness" Value="1"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                <Setter Property="Background" Value="{StaticResource AccentSoftBrush}"/>
+                                                <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Code}" FontWeight="SemiBold">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Foreground" Value="{StaticResource InkBrush}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                            <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <TextBlock Text="{Binding Description}" FontSize="11" TextWrapping="Wrap">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Description}" Value="">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                            <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="1" Text="{Binding DurationText}"
+                                               FontFamily="Consolas, Cascadia Mono, Courier New"
+                                               FontWeight="SemiBold" VerticalAlignment="Center" Margin="12,0">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="{StaticResource TimerBrush}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                        <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <Button Grid.Column="2" Style="{StaticResource GhostButton}" Content="Remove"
+                                            VerticalAlignment="Center" Click="Remove_Click"
+                                            ToolTip="Remove this row from the view. Time entries are kept."/>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+            <TextBlock x:Name="EmptyText" HorizontalAlignment="Center" VerticalAlignment="Center"
+                       TextAlignment="Center" TextWrapping="Wrap" Margin="24"
+                       Foreground="{StaticResource MutedBrush}"
+                       Text="No job codes in this view yet. Add a code to start timing."
+                       Visibility="Collapsed"/>
+        </Grid>
+    </DockPanel>
+</Window>

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>TimesheetBuddy.LockChecks</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\Models\TimeEntry.cs" Link="TimeEntry.cs" />
+    <Compile Include="..\..\Models\JobCode.cs" Link="JobCode.cs" />
+    <Compile Include="..\..\Models\FavoriteTask.cs" Link="FavoriteTask.cs" />
+    <Compile Include="..\..\Models\AppSettings.cs" Link="AppSettings.cs" />
+    <Compile Include="..\..\Services\WeekCalendar.cs" Link="WeekCalendar.cs" />
+    <Compile Include="..\..\Services\DayTotals.cs" Link="DayTotals.cs" />
+    <Compile Include="..\..\Services\JobCodeViewList.cs" Link="JobCodeViewList.cs" />
+    <Compile Include="..\..\Services\LockIntervalSplit.cs" Link="LockIntervalSplit.cs" />
+    <Compile Include="..\..\Services\ScreenLockTracker.cs" Link="ScreenLockTracker.cs" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,28 @@
+<Window x:Class="TimesheetBuddy.Views.LockPromptWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Screen was locked"
+        Width="520"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        Topmost="True"
+        ShowInTaskbar="True"
+        Background="{StaticResource BgBrush}">
+    <DockPanel Margin="18">
+        <WrapPanel DockPanel.Dock="Bottom" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Style="{StaticResource PrimaryButton}" Content="Keep on this code"
+                    Margin="0,0,8,8" Click="Keep_Click"/>
+            <Button x:Name="AssignButton" Style="{StaticResource CompactButton}" Content="Assign to selected code"
+                    Margin="0,0,8,8" Click="Assign_Click"/>
+            <Button Style="{StaticResource CompactButton}" Content="Add to break"
+                    Margin="0,0,0,8" Click="Break_Click"/>
+        </WrapPanel>
+
+        <StackPanel>
+            <TextBlock x:Name="MessageText" FontSize="14" TextWrapping="Wrap"/>
+            <TextBlock Text="Another job code" Foreground="{StaticResource MutedBrush}" Margin="0,14,0,2"/>
+            <ComboBox x:Name="CodeCombo" DisplayMemberPath="Display"/>
+        </StackPanel>
+    </DockPanel>
+</Window>

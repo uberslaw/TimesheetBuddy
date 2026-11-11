@@ -15,12 +15,17 @@ public partial class MainWindow : Window
     private readonly AppState _state = App.State;
     private readonly PromptScheduler _scheduler = App.Scheduler;
     private readonly DispatcherTimer _uiTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+    private readonly ScreenLockWatcher _lockWatcher;
+    private JobCodeViewWindow? _jobCodeView;
     private bool _suppressStart;
     private bool _positionDirty;
+    private bool _closing;
 
     public MainWindow()
     {
         InitializeComponent();
+        _lockWatcher = new ScreenLockWatcher(_state);
+        _lockWatcher.UnlockPrompt += OnScreenUnlocked;
         _uiTimer.Tick += (_, _) => RefreshTimer();
         _state.PropertyChanged += StateOnPropertyChanged;
         _state.SettingsChanged += (_, _) => ReloadSelectors();
@@ -38,6 +43,7 @@ public partial class MainWindow : Window
         RefreshTimer();
         _uiTimer.Start();
         _scheduler.Start();
+        _lockWatcher.Start();
         _state.RestoreSessionIfAny();
         BindStatus();
     }
@@ -270,6 +276,9 @@ public partial class MainWindow : Window
         var weeks = new MenuItem { Header = "Weeks & export…" };
         weeks.Click += (_, _) => OpenWeekBrowser();
         menu.Items.Add(weeks);
+        var jobCodes = new MenuItem { Header = "Job code view" };
+        jobCodes.Click += (_, _) => OpenJobCodeView();
+        menu.Items.Add(jobCodes);
         menu.PlacementTarget = sender as UIElement;
         menu.Placement = PlacementMode.Bottom;
         menu.IsOpen = true;
@@ -279,6 +288,49 @@ public partial class MainWindow : Window
     {
         var win = new WeekBrowserWindow { Owner = this };
         win.ShowDialog();
+    }
+
+    private void OpenJobCodeView()
+    {
+        if (_jobCodeView is { IsVisible: true })
+        {
+            if (_jobCodeView.WindowState == WindowState.Minimized)
+                _jobCodeView.WindowState = WindowState.Normal;
+            _jobCodeView.Activate();
+            return;
+        }
+
+        _jobCodeView = new JobCodeViewWindow { Owner = this };
+        _jobCodeView.Closed += (_, _) => _jobCodeView = null;
+        _jobCodeView.Show();
+        _jobCodeView.Activate();
+    }
+
+    private void OnScreenUnlocked(LockIntervalSplit.Snapshot snapshot, DateTime unlockedAtUtc, TimeSpan lockedFor)
+    {
+        if (_closing)
+            return;
+
+        var code = string.IsNullOrWhiteSpace(snapshot.JobCodeText)
+            ? snapshot.TaskName
+            : snapshot.JobCodeText;
+        var message = LockIntervalSplit.PromptMessage(LockIntervalSplit.ReportedMinutes(lockedFor), code);
+        var others = _state.JobCodes.Where(job => job.Id != snapshot.JobCodeId).ToList();
+
+        EnsureVisibleForPrompt();
+        var dialog = new LockPromptWindow(message, others) { Owner = this };
+        if (dialog.ShowDialog() != true)
+            return;
+
+        var applied = _state.ApplyScreenLockChoice(snapshot, unlockedAtUtc, dialog.Choice, dialog.SelectedCode);
+        if (!applied && dialog.Choice != LockIntervalSplit.Choice.KeepOnCurrent)
+        {
+            MessageBox.Show(this,
+                "Those minutes stayed on the task that was running. The timer had already stopped, so they were not moved.",
+                "Timesheet Buddy",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
     }
 
     private void AddManual_Click(object sender, RoutedEventArgs e)
@@ -390,6 +442,9 @@ public partial class MainWindow : Window
 
     private void Window_Closing(object? sender, CancelEventArgs e)
     {
+        _closing = true;
+        _lockWatcher.Dispose();
+
         // A normal close finishes a running timer onto today's list.
         // The open entry gets EndUtc and ActiveSession is cleared, so it
         // does not resume as an active session on the next launch.

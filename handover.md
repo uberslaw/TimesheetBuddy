@@ -26,13 +26,21 @@ TimesheetBuddy/
 │   ├── SettingsStore.cs            # Load/save settings.json
 │   ├── AppState.cs                 # Timer session, entries, settings mutations
 │   ├── UnaccountedTime.cs          # Catch-up overlap: unaccounted minutes vs still-working
-│   └── PromptScheduler.cs          # Recheck + catch-up timers
+│   ├── PromptScheduler.cs          # Recheck + catch-up timers
+│   ├── DayTotals.cs                # Today’s totals, including a live timer
+│   ├── JobCodeViewList.cs          # Visible job-code rows (active codes, or a saved order)
+│   ├── LockIntervalSplit.cs        # Split a lock interval off the running entry
+│   ├── ScreenLockTracker.cs        # Decide whether an unlock should prompt
+│   └── ScreenLockWatcher.cs        # SessionLock / SessionUnlock → prompt
 ├── Views/
 │   ├── SettingsWindow.*            # Job codes, favorites, categories, prompts
 │   ├── RecheckWindow.*             # “Still working on X?”
 │   ├── FifteenMinuteWindow.*       # Assign tasks to unaccounted minutes (Not now cancels)
 │   ├── DayLogWindow.*              # Today’s entries + day notes
-│   └── ManualEntryWindow.*         # Manual add from day log
+│   ├── ManualEntryWindow.*         # Manual add from day log
+│   ├── JobCodeViewWindow.*         # Alternate row-per-code timer view
+│   ├── AddJobCodeWindow.*          # Add an existing code or create one
+│   └── LockPromptWindow.*          # Assign locked minutes, or count them as break
 ├── README.md
 └── handover.md                     # This file
 ```
@@ -66,18 +74,24 @@ Requires [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) on Win
 | Catch-up prompt (only when minutes are unaccounted; Not now dismisses) | `PromptScheduler` → `UnaccountedTime` → `Views/FifteenMinuteWindow` or `RecheckWindow` |
 | Day log + free-form day notes | `Views/DayLogWindow` |
 | Manual time entry | `Views/ManualEntryWindow` |
+| Job code view (switch from the Menu; Compact tracker returns) | `Views/JobCodeViewWindow` |
+| Screen-lock prompt while a timer is running | `ScreenLockWatcher` → `Views/LockPromptWindow` |
 
 ## Data
 
 | File | Contents |
 |------|----------|
-| `%LocalAppData%\TimesheetBuddy\settings.json` | Job codes, favorites, categories, prompt prefs, window position, all time entries, active session |
+| `%LocalAppData%\TimesheetBuddy\settings.json` | Job codes, favorites, categories, prompt prefs, window position, job-code view order (`jobCodeViewIds`), all time entries, active session |
 | `%LocalAppData%\TimesheetBuddy\day-notes-yyyyMMdd.txt` | Per-day free-text notes from the day log |
 | `%LocalAppData%\TimesheetBuddy\crash.log` | Unhandled exceptions. Startup failures also show a dialog with this path |
 
 Defaults seed a few job codes (`ADMIN`, `DEV`, `MTG`, `SUP`) and sample favorites on first launch.
 
 Closing the app while a timer is running saves that task onto the current day's list as a finished entry (end time set). It does not resume after restart.
+
+**Job code view.** Menu → Job code view opens a taller window with one row per code. Click a row to run the timer on that code (the row turns green); Stop ends it for the whole view. Each row shows today’s time for that code, including the live timer, and the footer total is every entry logged today. Add inserts an existing code or creates a code plus description. Remove only changes the saved row list (`AppSettings.JobCodeViewIds`); it does not delete time entries. Until the user adds or removes a row, the view lists the active codes.
+
+**Screen lock.** If Windows locks the session while a timer is running, unlock (after at least one minute) asks whether those minutes stay on the current code, move to another code, or count as break. Break is a finished entry named Break in category Break, not a new job code. Moving the interval leaves the time before the lock on the original code and continues that code from the unlock moment, so the locked minutes are not counted twice. A lock under one minute, or a lock while the timer is idle, does not prompt.
 
 ## Architecture notes
 
@@ -98,7 +112,6 @@ Other reasonable next steps if needed:
 - Edit/delete historical entries in the day log
 - System tray icon / minimize-to-tray
 - Installer / single-file publish (`dotnet publish -c Release -r win-x64 --self-contained`)
-- Per-job-code daily totals / reporting view
 - Wire empty `Assets/` (app icon) and `Converters/` if binding converters are added
 
 ## Smoke-test checklist
