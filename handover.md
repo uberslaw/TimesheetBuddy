@@ -29,6 +29,7 @@ TimesheetBuddy/
 │   ├── PromptScheduler.cs          # Recheck + catch-up timers
 │   ├── DayTotals.cs                # Today’s totals, including a live timer
 │   ├── JobCodeViewList.cs          # Visible job-code rows (active codes, or a saved order)
+│   ├── TaskTypeSummary.cs          # Today's entries grouped by task + category + job code
 │   ├── LockIntervalSplit.cs        # Split a lock interval off the running entry
 │   ├── ScreenLockTracker.cs        # Decide whether an unlock should prompt
 │   └── ScreenLockWatcher.cs        # SessionLock / SessionUnlock → prompt
@@ -64,7 +65,8 @@ Requires [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) on Win
 
 | Feature | Where |
 |---------|--------|
-| Window size (~2× tray width, ~4× taskbar height) | `MainWindow.ApplyCompactSize()` |
+| Window size (~2× tray width, fixed; height resizable, saved) | `MainWindow.ApplyCompactSize()` |
+| Today by task (cumulative rows; click to continue) | `MainWindow` + `Services/TaskTypeSummary` |
 | Pin / always on top | Pin toggle → `AppState.UpdatePromptSettings` |
 | Start timer from job code / task / Enter | `MainWindow` selection + Start handlers |
 | Stop timer | Stop button → `AppState.StopActive` |
@@ -90,6 +92,8 @@ Defaults seed a few job codes (`ADMIN`, `DEV`, `MTG`, `SUP`) and sample favorite
 Closing the app while a timer is running saves that task onto the current day's list as a finished entry (end time set). It does not resume after restart.
 
 **Job code view.** Menu → Job code view opens a taller window with one row per code. Click a row to run the timer on that code (the row turns green); Stop ends it for the whole view. Each row shows today’s time for that code, including the live timer, and the footer total is every entry logged today. Add inserts an existing code or creates a code plus description. Remove only changes the saved row list (`AppSettings.JobCodeViewIds`); it does not delete time entries. Until the user adds or removes a row, the view lists the active codes.
+
+**Today by task (main window).** Below the inputs, the compact tracker lists today's work with one row per task type: task name + category + job code. Name and category match case-insensitively; the code matches on `JobCodeId`, or on the code text when an entry has no id. Every entry logged today joins its row automatically (timer, manual, catch-up, lock-split slices, Break). Columns: task, category, job code, total today (`hh:mm:ss`, including the live timer), and the number of segments in that total. Click a row to start the timer on that same task type (`AppState.StartOrSwitch`, which saves any running entry first); the new segment adds to the row and its count goes up. Clicking the row that is already running does nothing. The running row is green, like the job-code view. Stop stays on the main Stop button. Rows are ordered by most recent start and only re-sort when entries change, not on the one-second tick. The window is now height-resizable (fixed compact width, default up to 480 px tall, minimum 300); the height is saved with the position (`AppSettings.WindowHeight`), and NaN or infinite values are never written. Check: `dotnet run --project tests/TaskTypeSummaryCheck`.
 
 **Screen lock.** If Windows locks the session while a timer is running, unlock (after at least one minute) asks whether those minutes stay on the current code, move to another code, or count as break. Break is a finished entry named Break in category Break, not a new job code. Moving the interval leaves the time before the lock on the original code and continues that code from the unlock moment, so the locked minutes are not counted twice. A lock under one minute, or a lock while the timer is idle, does not prompt.
 
@@ -124,6 +128,7 @@ Other reasonable next steps if needed:
 6. Settings → set catch-up interval to 5 minutes. With a timer that has already been running for those 5 minutes, the still-working prompt appears and the assign-tasks dialog does not. With no timer and no entries in that window, the assign-tasks dialog shows the unaccounted minutes; Not now closes it without creating entries. Saving is blocked when the assigned minutes are 0 or more than the gap.
 7. Day log shows entries; day notes persist after blur/refocus.
 8. Close while a timer is running → the task is saved on today's list as a finished entry and does not resume after restart.
+9. Run a task, Stop, run another, then click the first task's row under "Today by task" → it turns green, its total keeps counting, and its segment count goes from 1 to 2. Clicking it again does nothing. Drag the bottom edge to resize; the height comes back after restart.
 
 ## Contact / ownership
 

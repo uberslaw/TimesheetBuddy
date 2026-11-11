@@ -10,6 +10,7 @@ public sealed class AppSettings
     public bool RecheckPromptEnabled { get; set; } = true;
     public double? WindowLeft { get; set; }
     public double? WindowTop { get; set; }
+    public double? WindowHeight { get; set; }
     public List<JobCode> JobCodes { get; set; } = [];
     public List<FavoriteTask> FavoriteTasks { get; set; } = [];
     public List<string> Categories { get; set; } =

@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Timesheet Buddy 3.0"
         WindowStyle="None"
-        ResizeMode="CanMinimize"
+        ResizeMode="CanResize"
         ShowInTaskbar="True"
         Background="{StaticResource BgBrush}"
         AllowsTransparency="False"
@@ -11,7 +11,40 @@
         Loaded="Window_Loaded"
         Closing="Window_Closing"
         LocationChanged="Window_LocationChanged"
+        SizeChanged="Window_SizeChanged"
         MouseLeftButtonDown="Window_MouseLeftButtonDown">
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0" ResizeBorderThickness="6" GlassFrameThickness="0"
+                      CornerRadius="0" UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
+    <Window.Resources>
+        <Style x:Key="TaskCellText" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource InkBrush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsActive}" Value="True">
+                    <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="TaskCellMuted" TargetType="TextBlock" BasedOn="{StaticResource TaskCellText}">
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+        </Style>
+        <Style x:Key="TaskCellNumber" TargetType="TextBlock" BasedOn="{StaticResource TaskCellText}">
+            <Setter Property="Foreground" Value="{StaticResource TimerBrush}"/>
+            <Setter Property="FontFamily" Value="Consolas, Cascadia Mono, Courier New"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="Margin" Value="0"/>
+        </Style>
+        <Style x:Key="TaskHeaderText" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+        </Style>
+    </Window.Resources>
     <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="1" Background="{StaticResource BgBrush}">
         <DockPanel Margin="8">
             <!-- Title bar -->
@@ -58,11 +91,11 @@
             </Border>
 
             <!-- Controls -->
-            <Grid>
+            <Grid DockPanel.Dock="Top">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -109,6 +142,89 @@
                                Text="Idle — pick a job code or task to start"/>
                 </DockPanel>
             </Grid>
+
+            <!-- Today, one row per task type -->
+            <DockPanel Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Top" Foreground="{StaticResource MutedBrush}" FontSize="11"
+                           Margin="0,0,0,4" Text="Today by task — click a row to keep going"/>
+                <Grid x:Name="TaskHeader" DockPanel.Dock="Top" Margin="9,0,9,2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2*"/>
+                        <ColumnDefinition Width="1.2*"/>
+                        <ColumnDefinition Width="1.4*"/>
+                        <ColumnDefinition Width="62"/>
+                        <ColumnDefinition Width="28"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Style="{StaticResource TaskHeaderText}" Text="Task"/>
+                    <TextBlock Grid.Column="1" Style="{StaticResource TaskHeaderText}" Text="Category"/>
+                    <TextBlock Grid.Column="2" Style="{StaticResource TaskHeaderText}" Text="Job code"/>
+                    <TextBlock Grid.Column="3" Style="{StaticResource TaskHeaderText}" Text="Total"
+                               HorizontalAlignment="Right" Margin="0"/>
+                    <TextBlock Grid.Column="4" Style="{StaticResource TaskHeaderText}" Text="#"
+                               HorizontalAlignment="Right" Margin="0"
+                               ToolTip="Number of segments that make up the total"/>
+                </Grid>
+                <Grid>
+                    <ScrollViewer x:Name="TaskScroll" VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  ScrollChanged="TaskScroll_ScrollChanged">
+                        <ItemsControl x:Name="TaskRowsList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,0,0,3" CornerRadius="4" Padding="8,4" Cursor="Hand"
+                                            MouseLeftButtonDown="TaskRow_MouseLeftButtonDown"
+                                            MouseLeftButtonUp="TaskRow_MouseLeftButtonUp">
+                                        <Border.ToolTip>
+                                            <TextBlock>
+                                                <Run Text="{Binding TaskName, Mode=OneWay}"/>
+                                                <Run Text="·"/>
+                                                <Run Text="{Binding Category, Mode=OneWay}"/>
+                                                <Run Text="·"/>
+                                                <Run Text="{Binding JobCodeDisplay, Mode=OneWay}"/>
+                                            </TextBlock>
+                                        </Border.ToolTip>
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="{StaticResource PanelBrush}"/>
+                                                <Setter Property="BorderBrush" Value="{StaticResource LineBrush}"/>
+                                                <Setter Property="BorderThickness" Value="1"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                        <Setter Property="Background" Value="{StaticResource AccentSoftBrush}"/>
+                                                        <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="2*"/>
+                                                <ColumnDefinition Width="1.2*"/>
+                                                <ColumnDefinition Width="1.4*"/>
+                                                <ColumnDefinition Width="62"/>
+                                                <ColumnDefinition Width="28"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Style="{StaticResource TaskCellText}" FontWeight="SemiBold"
+                                                       Text="{Binding TaskName}"/>
+                                            <TextBlock Grid.Column="1" Style="{StaticResource TaskCellMuted}"
+                                                       Text="{Binding Category}"/>
+                                            <TextBlock Grid.Column="2" Style="{StaticResource TaskCellMuted}"
+                                                       Text="{Binding JobCodeDisplay}"/>
+                                            <TextBlock Grid.Column="3" Style="{StaticResource TaskCellNumber}"
+                                                       FontWeight="SemiBold" Text="{Binding TotalText}"/>
+                                            <TextBlock Grid.Column="4" Style="{StaticResource TaskCellNumber}"
+                                                       Text="{Binding SegmentCount}"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                    <TextBlock x:Name="TaskEmptyText" HorizontalAlignment="Center" VerticalAlignment="Top"
+                               Margin="0,10,0,0" Foreground="{StaticResource MutedBrush}" FontSize="11"
+                               Text="Nothing logged today yet" Visibility="Collapsed"/>
+                </Grid>
+            </DockPanel>
         </DockPanel>
     </Border>
 </Window>

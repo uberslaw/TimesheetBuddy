@@ -135,19 +135,35 @@ public sealed class AppState : INotifyPropertyChanged
         if (string.IsNullOrWhiteSpace(taskName) && jobCode is null)
             return;
 
+        var name = !string.IsNullOrWhiteSpace(taskName) ? taskName
+            : !string.IsNullOrWhiteSpace(jobCode?.Description) ? jobCode.Description
+            : jobCode?.Code ?? "Untitled task";
+
+        StartOrSwitch(name, category, jobCode?.Id, jobCode?.Display ?? string.Empty);
+    }
+
+    /// <summary>
+    /// Starts a task type logged earlier. The code id and text are kept as given, so the new
+    /// segment groups with the earlier ones even when that code was since removed.
+    /// </summary>
+    public void StartOrSwitch(string taskName, string category, Guid? jobCodeId, string jobCodeText)
+    {
+        if (string.IsNullOrWhiteSpace(taskName) && jobCodeId is null && string.IsNullOrWhiteSpace(jobCodeText))
+            return;
+
         StopActive(save: true);
 
-        var codeText = jobCode?.Display ?? string.Empty;
         var name = string.IsNullOrWhiteSpace(taskName)
-            ? (jobCode?.Description ?? jobCode?.Code ?? "Untitled task")
+            ? (string.IsNullOrWhiteSpace(jobCodeText) ? "Untitled task" : jobCodeText.Trim())
             : taskName.Trim();
+        var codeText = jobCodeText?.Trim() ?? string.Empty;
 
         var entry = new TimeEntry
         {
             StartUtc = DateTime.UtcNow,
             TaskName = name,
             Category = string.IsNullOrWhiteSpace(category) ? "General" : category.Trim(),
-            JobCodeId = jobCode?.Id,
+            JobCodeId = jobCodeId,
             JobCodeText = codeText,
             Source = "timer"
         };
@@ -158,7 +174,7 @@ public sealed class AppState : INotifyPropertyChanged
             EntryId = entry.Id,
             TaskName = name,
             Category = entry.Category,
-            JobCodeId = jobCode?.Id,
+            JobCodeId = jobCodeId,
             JobCodeText = codeText,
             StartedUtc = entry.StartUtc
         };
@@ -372,10 +388,15 @@ public sealed class AppState : INotifyPropertyChanged
         SettingsChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    public void SaveWindowPosition(double left, double top)
+    public void SaveWindowPosition(double left, double top, double height)
     {
+        if (!double.IsFinite(left) || !double.IsFinite(top))
+            return;
+
         _settings.WindowLeft = left;
         _settings.WindowTop = top;
+        if (double.IsFinite(height) && height > 0)
+            _settings.WindowHeight = height;
         Persist();
     }
 

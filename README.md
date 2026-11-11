@@ -4,7 +4,7 @@ A compact always-on-top WPF (.NET 10) timesheet helper for tracking time against
 
 ## What it does
 
-- **Compact tracker window** sized from your taskbar/tray (~2× tray width, ~4× taskbar height), draggable, pinable always-on-top
+- **Compact tracker window** sized from your tray (~2× tray width; drag the bottom edge to change the height), draggable, pinable always-on-top
 - **Live timer** for the active task — starts when you pick a job code and/or enter/select a task name
 - **Settings** to manage job codes, favorite tasks, categories, recheck interval, and the catch-up popup interval
 - **Quick add** menu of favorite tasks (grouped by category)

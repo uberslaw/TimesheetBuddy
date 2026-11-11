@@ -1,4 +1,6 @@
-﻿using System.ComponentModel;
+﻿using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -16,7 +18,11 @@ public partial class MainWindow : Window
     private readonly PromptScheduler _scheduler = App.Scheduler;
     private readonly DispatcherTimer _uiTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly ScreenLockWatcher _lockWatcher;
+    private readonly ObservableCollection<TaskTypeRowModel> _taskRows = [];
     private JobCodeViewWindow? _jobCodeView;
+    private TaskTypeRowModel? _pressedRow;
+    private DateTime _taskRowsDay = DateTime.Today;
+    private bool _taskRebuildQueued;
     private bool _suppressStart;
     private bool _positionDirty;
     private bool _closing;
@@ -24,11 +30,13 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        TaskRowsList.ItemsSource = _taskRows;
         _lockWatcher = new ScreenLockWatcher(_state);
         _lockWatcher.UnlockPrompt += OnScreenUnlocked;
         _uiTimer.Tick += (_, _) => RefreshTimer();
         _state.PropertyChanged += StateOnPropertyChanged;
         _state.SettingsChanged += (_, _) => ReloadSelectors();
+        _state.TodayEntries.CollectionChanged += (_, _) => QueueTaskRebuild();
         _scheduler.RecheckDue += OnRecheckDue;
         _scheduler.FifteenMinuteDue += OnFifteenDue;
     }
@@ -46,35 +54,45 @@ public partial class MainWindow : Window
         _lockWatcher.Start();
         _state.RestoreSessionIfAny();
         BindStatus();
+        RebuildTaskRows();
     }
 
     private void ApplyCompactSize()
     {
-        // Taskbar height ≈ screen height − work area height.
-        var taskbarHeight = SystemParameters.PrimaryScreenHeight - SystemParameters.WorkArea.Height;
-        if (taskbarHeight < 28) taskbarHeight = 40;
+        var work = SystemParameters.WorkArea;
 
         // Approximate system tray width as a slice of the work area (typical tray cluster).
-        var trayWidth = Math.Clamp(SystemParameters.WorkArea.Width * 0.12, 180, 320);
+        var trayWidth = Math.Clamp(work.Width * 0.12, 180, 320);
+        Width = Math.Clamp(Math.Round(trayWidth * 2), 420, 720);
+        MinWidth = Width;
+        MaxWidth = Width;
 
-        Width = Math.Round(trayWidth * 2);
-        Height = Math.Round(taskbarHeight * 4);
-        MinWidth = 420;
-        MinHeight = 150;
-        MaxWidth = 720;
-        MaxHeight = 280;
+        // Tall enough for the controls plus several task rows; the list scrolls beyond that.
+        MinHeight = 300;
+        MaxHeight = Math.Max(MinHeight, work.Height);
+        var saved = _state.Settings.WindowHeight;
+        Height = saved is double h && double.IsFinite(h) && h > 0
+            ? Math.Clamp(h, MinHeight, MaxHeight)
+            : Math.Clamp(Math.Round(work.Height * 0.5), MinHeight, Math.Min(480, MaxHeight));
     }
 
     private void PlaceWindow()
     {
+        var work = SystemParameters.WorkArea;
         if (IsSavedPosition(_state.Settings.WindowLeft, _state.Settings.WindowTop))
         {
             Left = _state.Settings.WindowLeft!.Value;
             Top = _state.Settings.WindowTop!.Value;
+
+            // A position saved for the old short window can push the taller one off the bottom.
+            var onPrimary = Left >= work.Left - Width && Left <= work.Right;
+            var bottom = onPrimary ? work.Bottom : SystemParameters.VirtualScreenTop + SystemParameters.VirtualScreenHeight;
+            var top = onPrimary ? work.Top : SystemParameters.VirtualScreenTop;
+            if (Top + Height > bottom)
+                Top = Math.Max(top, bottom - Height);
             return;
         }
 
-        var work = SystemParameters.WorkArea;
         Left = work.Right - Width - 12;
         Top = work.Bottom - Height - 12;
     }
@@ -112,18 +130,130 @@ public partial class MainWindow : Window
     {
         _state.Tick();
         TimerText.Text = _state.ElapsedDisplay;
+        RefreshTaskTotals();
         if (_positionDirty)
         {
             _positionDirty = false;
-            _state.SaveWindowPosition(Left, Top);
+            SavePlacement();
         }
     }
+
+    private void SavePlacement() =>
+        _state.SaveWindowPosition(Left, Top, WindowState == WindowState.Normal ? ActualHeight : double.NaN);
 
     private void StateOnPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         Dispatcher.Invoke(BindStatus);
         if (e.PropertyName is nameof(AppState.ActiveSession) or nameof(AppState.IsRunning))
             _scheduler.OnSessionChanged();
+        if (e.PropertyName is nameof(AppState.ActiveSession))
+            QueueTaskRebuild();
+    }
+
+    // RefreshToday clears and refills TodayEntries, so coalesce those events into one rebuild.
+    private void QueueTaskRebuild()
+    {
+        if (_taskRebuildQueued)
+            return;
+        _taskRebuildQueued = true;
+        Dispatcher.InvokeAsync(() =>
+        {
+            _taskRebuildQueued = false;
+            RebuildTaskRows();
+        }, DispatcherPriority.Background);
+    }
+
+    /// <summary>Re-sorts the list. Only runs when entries change, never on the clock tick.</summary>
+    private void RebuildTaskRows()
+    {
+        var day = DateTime.Today;
+        var summary = TaskTypeSummary.Build(_state.Settings.Entries, day, DateTime.UtcNow);
+        _taskRowsDay = day;
+
+        _taskRows.Clear();
+        foreach (var row in summary)
+            _taskRows.Add(TaskTypeRowModel.From(row));
+
+        ApplyTaskTotals(summary);
+        var empty = _taskRows.Count == 0;
+        TaskEmptyText.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
+        TaskHeader.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void RefreshTaskTotals()
+    {
+        if (_taskRowsDay != DateTime.Today)
+        {
+            RebuildTaskRows();
+            return;
+        }
+
+        var summary = TaskTypeSummary.Build(_state.Settings.Entries, _taskRowsDay, DateTime.UtcNow);
+        if (summary.Count != _taskRows.Count)
+        {
+            RebuildTaskRows();
+            return;
+        }
+
+        ApplyTaskTotals(summary);
+    }
+
+    private void ApplyTaskTotals(IReadOnlyList<TaskTypeRow> summary)
+    {
+        var byKey = summary.ToDictionary(r => r.Key);
+        var session = _state.ActiveSession;
+        var activeKey = session is null
+            ? null
+            : TaskTypeSummary.KeyOf(session.TaskName, session.Category, session.JobCodeId, session.JobCodeText);
+
+        foreach (var row in _taskRows)
+        {
+            if (!byKey.TryGetValue(row.Key, out var current))
+            {
+                QueueTaskRebuild();
+                return;
+            }
+
+            row.TotalText = DayTotals.FormatClock(current.Total);
+            row.SegmentCount = current.SegmentCount;
+            row.IsActive = row.Key == activeKey;
+        }
+    }
+
+    private void TaskRow_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        // Keep the window's drag handler from swallowing the click.
+        _pressedRow = (sender as FrameworkElement)?.DataContext as TaskTypeRowModel;
+        e.Handled = true;
+    }
+
+    private void TaskRow_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        var pressed = _pressedRow;
+        _pressedRow = null;
+        if (sender is not FrameworkElement { DataContext: TaskTypeRowModel row } || !ReferenceEquals(row, pressed))
+            return;
+        e.Handled = true;
+        if (row.IsActive)
+            return;
+
+        var session = _state.ActiveSession;
+        if (session is not null &&
+            TaskTypeSummary.KeyOf(session.TaskName, session.Category, session.JobCodeId, session.JobCodeText) == row.Key)
+            return;
+
+        var code = _state.FindJobCode(row.JobCodeId);
+        _state.StartOrSwitch(row.TaskName, row.Category, row.JobCodeId, code?.Display ?? row.JobCodeText);
+        _scheduler.OnSessionChanged();
+        BindStatus();
+    }
+
+    private void TaskScroll_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        var bar = TaskScroll.ComputedVerticalScrollBarVisibility == Visibility.Visible
+            ? SystemParameters.VerticalScrollBarWidth
+            : 0;
+        TaskHeader.Margin = new Thickness(9, 0, 9 + bar, 2);
     }
 
     private void PinToggle_Changed(object sender, RoutedEventArgs e)
@@ -440,6 +570,12 @@ public partial class MainWindow : Window
 
     private void Window_LocationChanged(object? sender, EventArgs e) => _positionDirty = true;
 
+    private void Window_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (IsLoaded)
+            _positionDirty = true;
+    }
+
     private void Window_Closing(object? sender, CancelEventArgs e)
     {
         _closing = true;
@@ -454,7 +590,57 @@ public partial class MainWindow : Window
             _scheduler.OnSessionChanged();
         }
 
-        _state.SaveWindowPosition(Left, Top);
+        SavePlacement();
         _state.Persist();
+    }
+}
+
+public sealed class TaskTypeRowModel : INotifyPropertyChanged
+{
+    public required string Key { get; init; }
+    public required string TaskName { get; init; }
+    public required string Category { get; init; }
+    public required Guid? JobCodeId { get; init; }
+    public required string JobCodeText { get; init; }
+    public string JobCodeDisplay => string.IsNullOrWhiteSpace(JobCodeText) ? "—" : JobCodeText;
+
+    public static TaskTypeRowModel From(TaskTypeRow row) => new()
+    {
+        Key = row.Key,
+        TaskName = row.TaskName,
+        Category = row.Category,
+        JobCodeId = row.JobCodeId,
+        JobCodeText = row.JobCodeText
+    };
+
+    private string _totalText = "00:00:00";
+    public string TotalText
+    {
+        get => _totalText;
+        set => Set(ref _totalText, value);
+    }
+
+    private int _segmentCount;
+    public int SegmentCount
+    {
+        get => _segmentCount;
+        set => Set(ref _segmentCount, value);
+    }
+
+    private bool _isActive;
+    public bool IsActive
+    {
+        get => _isActive;
+        set => Set(ref _isActive, value);
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private void Set<T>(ref T field, T value, [CallerMemberName] string? name = null)
+    {
+        if (EqualityComparer<T>.Default.Equals(field, value))
+            return;
+        field = value;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 }
