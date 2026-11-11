@@ -76,7 +76,7 @@ Requires [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) on Win
 
 Defaults seed a few job codes (`ADMIN`, `DEV`, `MTG`, `SUP`) and sample favorites on first launch.
 
-Active timer session is restored after restart if one was running when the app closed.
+Closing the app while a timer is running saves that task onto the current day's list as a finished entry (end time set). It does not resume after restart.
 
 ## Architecture notes
 
@@ -108,7 +108,7 @@ Other reasonable next steps if needed:
 5. Settings → set recheck to a short interval (e.g. 0h 5m) with an active task → popup appears; choose next interval.
 6. Settings → set catch-up interval to 5 minutes → popup stays until rows are saved.
 7. Day log shows entries; day notes persist after blur/refocus.
-8. Restart while a timer is running → session and elapsed time resume.
+8. Close while a timer is running → the task is saved on today's list as a finished entry and does not resume after restart.
 
 ## Contact / ownership
 

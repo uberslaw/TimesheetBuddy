@@ -97,8 +97,6 @@ public partial class MainWindow : Window
 
     private void BindStatus()
     {
-        ActiveTaskText.Text = _state.ActiveTaskLabel;
-        ActiveCodeText.Text = _state.ActiveJobCodeLabel;
         StatusText.Text = _state.StatusText;
         TimerText.Text = _state.ElapsedDisplay;
     }
@@ -265,6 +263,12 @@ public partial class MainWindow : Window
         win.ShowDialog();
     }
 
+    private void AddManual_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new ManualEntryWindow { Owner = this };
+        dialog.ShowDialog();
+    }
+
     private void OnRecheckDue()
     {
         Dispatcher.Invoke(() =>
@@ -330,6 +334,15 @@ public partial class MainWindow : Window
 
     private void Window_Closing(object? sender, CancelEventArgs e)
     {
+        // A normal close finishes a running timer onto today's list.
+        // The open entry gets EndUtc and ActiveSession is cleared, so it
+        // does not resume as an active session on the next launch.
+        if (_state.ActiveSession is not null)
+        {
+            _state.StopActive(save: true);
+            _scheduler.OnSessionChanged();
+        }
+
         _state.SaveWindowPosition(Left, Top);
         _state.Persist();
     }

@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Add manual entry"
-        Height="340" Width="420"
+        Height="400" Width="420"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         Background="{StaticResource BgBrush}">
@@ -24,11 +24,21 @@
             <TextBlock Text="Category" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,2"/>
             <ComboBox x:Name="CategoryCombo" IsEditable="True" Margin="0,0,0,10"/>
 
-            <TextBlock Text="Minutes" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,2"/>
-            <ComboBox x:Name="MinutesCombo" Margin="0,0,0,10"/>
+            <TextBlock Text="Time" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,2"/>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                <TextBox x:Name="HoursBox" Width="56" MaxLength="6" Text="0" TextAlignment="Right"
+                         ToolTip="Hours (0 or more)"/>
+                <TextBlock Text="hours" VerticalAlignment="Center" Margin="6,0,14,0"
+                           Foreground="{StaticResource MutedBrush}"/>
+                <TextBox x:Name="MinutesBox" Width="56" MaxLength="2" Text="15" TextAlignment="Right"
+                         ToolTip="Minutes (0–59)"/>
+                <TextBlock Text="minutes" VerticalAlignment="Center" Margin="6,0,0,0"
+                           Foreground="{StaticResource MutedBrush}"/>
+            </StackPanel>
 
-            <TextBlock Text="Notes" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,2"/>
-            <TextBox x:Name="NotesBox" AcceptsReturn="True" Height="60" TextWrapping="Wrap"/>
+            <TextBlock Text="Comments" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,2"/>
+            <TextBox x:Name="CommentsBox" AcceptsReturn="True" Height="60" TextWrapping="Wrap"
+                     VerticalScrollBarVisibility="Auto"/>
         </StackPanel>
     </DockPanel>
 </Window>
