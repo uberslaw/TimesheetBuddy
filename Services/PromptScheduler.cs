@@ -60,8 +60,18 @@ public sealed class PromptScheduler
             return;
         }
 
-        var minutes = Math.Max(5, _state.Settings.FifteenMinuteIntervalMinutes);
+        var minutes = _state.CatchUpIntervalMinutes;
         _nextFifteenUtc = DateTime.UtcNow.AddMinutes(minutes);
+    }
+
+    /// <summary>
+    /// If the long-running recheck is already due, push it forward so a catch-up
+    /// cycle does not stack a second "still working?" dialog.
+    /// </summary>
+    public void ResetRecheckIfDue()
+    {
+        if (_nextRecheckUtc <= DateTime.UtcNow)
+            ResetRecheck();
     }
 
     public void OnSessionChanged()

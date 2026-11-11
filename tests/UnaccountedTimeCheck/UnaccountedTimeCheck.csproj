@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="..\..\Services\UnaccountedTime.cs" />
+    <Compile Include="..\..\Models\TimeEntry.cs" />
+    <Compile Include="..\..\Models\AppSettings.cs" />
+    <Compile Include="..\..\Models\JobCode.cs" />
+    <Compile Include="..\..\Models\FavoriteTask.cs" />
+  </ItemGroup>
+
+</Project>

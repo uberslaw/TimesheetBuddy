@@ -37,6 +37,12 @@ public sealed class AppState : INotifyPropertyChanged
 
     public AppSettings Settings => _settings;
 
+    /// <summary>
+    /// X for the catch-up prompt. Same floor the scheduler uses; not a second interval.
+    /// </summary>
+    public int CatchUpIntervalMinutes =>
+        Math.Max(5, _settings.FifteenMinuteIntervalMinutes);
+
     public ActiveSession? ActiveSession
     {
         get => _settings.ActiveSession;
@@ -200,6 +206,16 @@ public sealed class AppState : INotifyPropertyChanged
         RefreshToday();
         Persist();
     }
+
+    public UnaccountedWindow MeasureCatchUpWindow(DateTime? nowUtc = null) =>
+        UnaccountedTime.Measure(
+            _settings.Entries,
+            ActiveSession,
+            CatchUpIntervalMinutes,
+            nowUtc ?? DateTime.UtcNow);
+
+    public void AddCatchUpAssignments(IReadOnlyList<CatchUpSlice> slices, UnaccountedWindow window) =>
+        AddFifteenMinuteRows(UnaccountedTime.Place(slices, window));
 
     public void AddManualEntry(TimeEntry entry)
     {

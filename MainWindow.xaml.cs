@@ -287,46 +287,84 @@ public partial class MainWindow : Window
         dialog.ShowDialog();
     }
 
-    private void OnRecheckDue()
+    private void OnRecheckDue() => Dispatcher.Invoke(ShowRecheck);
+
+    private void ShowRecheck()
     {
-        Dispatcher.Invoke(() =>
+        if (_scheduler.RecheckOpen || _state.ActiveSession is null) return;
+        _scheduler.RecheckOpen = true;
+        try
         {
-            if (_scheduler.RecheckOpen || _state.ActiveSession is null) return;
-            _scheduler.RecheckOpen = true;
-            try
-            {
-                EnsureVisibleForPrompt();
-                var win = new RecheckWindow { Owner = this };
-                win.ShowDialog();
-            }
-            finally
-            {
-                Topmost = _state.Settings.AlwaysOnTop;
-                _scheduler.RecheckOpen = false;
-                _scheduler.ResetRecheck();
-            }
-        });
+            EnsureVisibleForPrompt();
+            var win = new RecheckWindow { Owner = this };
+            win.ShowDialog();
+        }
+        finally
+        {
+            Topmost = _state.Settings.AlwaysOnTop;
+            _scheduler.RecheckOpen = false;
+            _scheduler.ResetRecheck();
+            // A covered window would only ask "still working?" again.
+            if (_state.MeasureCatchUpWindow().UnaccountedMinutes == 0)
+                _scheduler.ResetFifteen();
+        }
     }
 
     private void OnFifteenDue()
     {
         Dispatcher.Invoke(() =>
         {
-            if (_scheduler.FifteenOpen) return;
-            _scheduler.FifteenOpen = true;
-            try
+            if (_scheduler.FifteenOpen || _scheduler.RecheckOpen) return;
+
+            var gap = _state.MeasureCatchUpWindow();
+            switch (UnaccountedTime.Decide(gap, _state.ActiveSession is not null))
             {
-                EnsureVisibleForPrompt();
-                var win = new FifteenMinuteWindow { Owner = this };
-                win.ShowDialog();
-            }
-            finally
-            {
-                Topmost = _state.Settings.AlwaysOnTop;
-                _scheduler.FifteenOpen = false;
-                _scheduler.ResetFifteen();
+                case CatchUpPromptKind.AssignTasks:
+                    ShowAssignTasks(gap);
+                    break;
+                case CatchUpPromptKind.StillWorking:
+                    ShowStillWorkingFromCatchUp();
+                    break;
+                default:
+                    _scheduler.ResetFifteen();
+                    break;
             }
         });
+    }
+
+    private void ShowAssignTasks(UnaccountedWindow gap)
+    {
+        _scheduler.FifteenOpen = true;
+        try
+        {
+            EnsureVisibleForPrompt();
+            var win = new FifteenMinuteWindow(gap) { Owner = this };
+            win.ShowDialog();
+        }
+        finally
+        {
+            Topmost = _state.Settings.AlwaysOnTop;
+            _scheduler.FifteenOpen = false;
+            _scheduler.ResetFifteen();
+            _scheduler.ResetRecheckIfDue();
+        }
+    }
+
+    private void ShowStillWorkingFromCatchUp()
+    {
+        // Hold the catch-up flag so the recheck timer cannot open a second dialog
+        // on top of this one. ShowRecheck resets the recheck deadline on dismiss.
+        _scheduler.FifteenOpen = true;
+        try
+        {
+            ShowRecheck();
+        }
+        finally
+        {
+            Topmost = _state.Settings.AlwaysOnTop;
+            _scheduler.FifteenOpen = false;
+            _scheduler.ResetFifteen();
+        }
     }
 
     private void EnsureVisibleForPrompt()

@@ -1,9 +1,9 @@
 <Window x:Class="TimesheetBuddy.Views.FifteenMinuteWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Timesheet catch-up"
-        Height="480" Width="780"
-        MinHeight="420" MinWidth="700"
+        Title="Unaccounted time"
+        Height="520" Width="1020"
+        MinHeight="440" MinWidth="880"
         WindowStartupLocation="CenterScreen"
         Topmost="True"
         ShowInTaskbar="True"
@@ -16,16 +16,18 @@
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Style="{StaticResource CompactButton}" Content="Add row" Margin="0,0,8,0"
                         Click="AddRow_Click"/>
-                <Button Style="{StaticResource PrimaryButton}" Content="Save &amp; continue" Width="140"
+                <Button Style="{StaticResource CompactButton}" Content="Not now" Width="90" Margin="0,0,8,0"
+                        IsCancel="True"/>
+                <Button x:Name="SaveButton" Style="{StaticResource PrimaryButton}" Content="Save &amp; continue" Width="140"
                         IsDefault="True" Click="Save_Click"/>
             </StackPanel>
         </DockPanel>
 
         <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
             <TextBlock x:Name="PromptTitle" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap"
-                       Text="What have you done for the last 15 minutes?"/>
+                       Text="0 unaccounted for minutes, would you like to assign tasks to them?"/>
             <TextBlock Margin="0,6,0,0" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"
-                       Text="Add one or more rows. Pick a common task to fill the job code automatically, or choose a code and write a comment."/>
+                       Text="Pick one or more tasks and assign minutes that add up to that time. You can give the whole gap to one task, or leave some unaccounted. Not now adds nothing."/>
         </StackPanel>
 
         <DockPanel>
@@ -48,8 +50,14 @@
                       BorderBrush="{StaticResource LineBrush}"
                       AlternatingRowBackground="#F8FAFC">
                 <DataGrid.Columns>
+                    <DataGridTextColumn Header="Task name"
+                                        Binding="{Binding TaskName, UpdateSourceTrigger=PropertyChanged}"
+                                        Width="150"/>
+                    <DataGridComboBoxColumn x:Name="CategoryCol" Header="Category"
+                                            Width="110"
+                                            SelectedItemBinding="{Binding Category, UpdateSourceTrigger=PropertyChanged}"/>
                     <DataGridComboBoxColumn x:Name="CommonCol" Header="Common task"
-                                            Width="160"
+                                            Width="140"
                                             DisplayMemberPath="Name"
                                             SelectedValuePath="Name"
                                             SelectedValueBinding="{Binding CommonTaskName, UpdateSourceTrigger=PropertyChanged}"/>
@@ -57,7 +65,7 @@
                                         Binding="{Binding Notes, UpdateSourceTrigger=PropertyChanged}"
                                         Width="*"/>
                     <DataGridComboBoxColumn x:Name="CodeCol" Header="Job code"
-                                            Width="170"
+                                            Width="160"
                                             DisplayMemberPath="Display"
                                             SelectedValuePath="Id"
                                             SelectedValueBinding="{Binding JobCodeId, UpdateSourceTrigger=PropertyChanged}"/>

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Desktop timesheet helper for logging time against job codes through the day. Compact always-on-top window with an active timer, favorites, settings, a “still working?” recheck prompt, and a catch-up popup that asks what you did in the last N minutes.
+Desktop timesheet helper for logging time against job codes through the day. Compact always-on-top window with an active timer, favorites, settings, a “still working?” recheck prompt, and a catch-up check. Every catch-up interval, if some of the last N minutes are not already logged (including a running timer), it asks you to assign tasks to those unaccounted minutes. If a timer already covers the interval, it asks whether you are still on that task instead.
 
 ## Stack
 
@@ -25,11 +25,12 @@ TimesheetBuddy/
 ├── Services/
 │   ├── SettingsStore.cs            # Load/save settings.json
 │   ├── AppState.cs                 # Timer session, entries, settings mutations
+│   ├── UnaccountedTime.cs          # Catch-up overlap: unaccounted minutes vs still-working
 │   └── PromptScheduler.cs          # Recheck + catch-up timers
 ├── Views/
 │   ├── SettingsWindow.*            # Job codes, favorites, categories, prompts
 │   ├── RecheckWindow.*             # “Still working on X?”
-│   ├── FifteenMinuteWindow.*       # Catch-up rows (codes, comments, minutes)
+│   ├── FifteenMinuteWindow.*       # Assign tasks to unaccounted minutes (Not now cancels)
 │   ├── DayLogWindow.*              # Today’s entries + day notes
 │   └── ManualEntryWindow.*         # Manual add from day log
 ├── README.md
@@ -62,7 +63,7 @@ Requires [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) on Win
 | Quick-add favorites menu | `MainWindow.QuickAdd_Click` |
 | Settings (codes, favorites, categories, intervals) | `Views/SettingsWindow` |
 | Still-working recheck popup | `PromptScheduler` → `Views/RecheckWindow` |
-| Catch-up popup (blocks until Save) | `PromptScheduler` → `Views/FifteenMinuteWindow` |
+| Catch-up prompt (only when minutes are unaccounted; Not now dismisses) | `PromptScheduler` → `UnaccountedTime` → `Views/FifteenMinuteWindow` or `RecheckWindow` |
 | Day log + free-form day notes | `Views/DayLogWindow` |
 | Manual time entry | `Views/ManualEntryWindow` |
 
@@ -83,7 +84,8 @@ Closing the app while a timer is running saves that task onto the current day's 
 - **No MVVM framework** — code-behind + `AppState` (`INotifyPropertyChanged`) for simplicity.
 - **Singletons on `App`**: `App.State`, `App.Scheduler`, `App.Store`.
 - **PromptScheduler** ticks every second; only one modal prompt at a time (`RecheckOpen` / `FifteenOpen`).
-- Catch-up and recheck windows cancel close until the user acts (catch-up requires Save).
+- Catch-up measures the last N minutes (`FifteenMinuteIntervalMinutes`, same value the scheduler waits). Accounted time is the union of logged entries plus the running timer's elapsed overlap. A gap under 30 seconds counts as zero. If at least one minute is unaccounted, the assign-tasks dialog opens and the still-working dialog does not. If nothing is unaccounted and a timer is running, the existing still-working window opens instead. If nothing is unaccounted and no timer is running, no popup appears.
+- The still-working window stays until the user chooses. Catch-up can be dismissed with Not now, which does not create entries. Save is allowed only when the assigned minutes are positive and do not exceed the unaccounted total (assigning less is allowed).
 - Selecting a job code in the main window **starts** the timer immediately.
 
 ## Known gaps / follow-ups
@@ -106,7 +108,7 @@ Other reasonable next steps if needed:
 3. Pick job code → timer starts; Stop ends it.
 4. Quick add a favorite → timer switches to that task.
 5. Settings → set recheck to a short interval (e.g. 0h 5m) with an active task → popup appears; choose next interval.
-6. Settings → set catch-up interval to 5 minutes → popup stays until rows are saved.
+6. Settings → set catch-up interval to 5 minutes. With a timer that has already been running for those 5 minutes, the still-working prompt appears and the assign-tasks dialog does not. With no timer and no entries in that window, the assign-tasks dialog shows the unaccounted minutes; Not now closes it without creating entries. Saving is blocked when the assigned minutes are 0 or more than the gap.
 7. Day log shows entries; day notes persist after blur/refocus.
 8. Close while a timer is running → the task is saved on today's list as a finished entry and does not resume after restart.
 
