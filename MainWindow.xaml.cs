@@ -549,6 +549,9 @@ public partial class MainWindow : Window
         _state.StartOrSwitch(task, category, code);
         _scheduler.OnSessionChanged();
         BindStatus();
+
+        // Ready for the next task name after Enter / Start.
+        TaskNameCombo.Text = string.Empty;
     }
 
     private void QuickAdd_Click(object sender, RoutedEventArgs e)
