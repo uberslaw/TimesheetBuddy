@@ -1,0 +1,25 @@
+<Window x:Class="TimesheetBuddy.Views.LoadTimesheetWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Load timesheet"
+        Icon="/Assets/TimesheetBuddy.ico"
+        Height="420" Width="360"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{StaticResource BgBrush}">
+    <DockPanel Margin="16">
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Style="{StaticResource CompactButton}" Content="Cancel" Width="80" Margin="0,0,8,0"
+                    IsCancel="True" Click="Cancel_Click"/>
+            <Button Style="{StaticResource PrimaryButton}" Content="Load" Width="80"
+                    IsDefault="True" Click="Load_Click"/>
+        </StackPanel>
+        <StackPanel>
+            <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,8"
+                       Text="Choose a day to view or edit"/>
+            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,12"
+                       Text="While an older day is loaded, the live timer is stopped and task clicks will not start timing. You can still add manual time."/>
+            <Calendar x:Name="DayCalendar" SelectionMode="SingleDate"/>
+        </StackPanel>
+    </DockPanel>
+</Window>

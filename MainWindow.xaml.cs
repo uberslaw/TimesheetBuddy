@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using TimesheetBuddy.Models;
 using TimesheetBuddy.Services;
@@ -19,6 +20,7 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _uiTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly ScreenLockWatcher _lockWatcher;
     private readonly ObservableCollection<TaskTypeRowModel> _taskRows = [];
+    private readonly HashSet<string> _expandedKeys = new(StringComparer.Ordinal);
     private JobCodeViewWindow? _jobCodeView;
     private TaskTypeRowModel? _pressedRow;
     private DateTime _taskRowsDay = DateTime.Today;
@@ -36,6 +38,12 @@ public partial class MainWindow : Window
         _uiTimer.Tick += (_, _) => RefreshTimer();
         _state.PropertyChanged += StateOnPropertyChanged;
         _state.SettingsChanged += (_, _) => ReloadSelectors();
+        _state.ViewingDateChanged += (_, _) => Dispatcher.Invoke(() =>
+        {
+            ApplyModeUi();
+            QueueTaskRebuild();
+            BindStatus();
+        });
         _state.TodayEntries.CollectionChanged += (_, _) => QueueTaskRebuild();
         _scheduler.RecheckDue += OnRecheckDue;
         _scheduler.FifteenMinuteDue += OnFifteenDue;
@@ -48,11 +56,13 @@ public partial class MainWindow : Window
         PinToggle.IsChecked = _state.Settings.AlwaysOnTop;
         Topmost = _state.Settings.AlwaysOnTop;
         ReloadSelectors();
+        ApplyModeUi();
         RefreshTimer();
         _uiTimer.Start();
         _scheduler.Start();
         _lockWatcher.Start();
-        _state.RestoreSessionIfAny();
+        if (!_state.IsHistoryMode)
+            _state.RestoreSessionIfAny();
         BindStatus();
         RebuildTaskRows();
     }
@@ -102,6 +112,31 @@ public partial class MainWindow : Window
         !double.IsNaN(x) && !double.IsNaN(y) &&
         !double.IsInfinity(x) && !double.IsInfinity(y);
 
+    private void ApplyModeUi()
+    {
+        var history = _state.IsHistoryMode;
+        HistoryBanner.Visibility = history ? Visibility.Visible : Visibility.Collapsed;
+        HistoryBannerText.Text = history
+            ? $"Editing {_state.ViewingDate:ddd d MMM yyyy} — timer inactive"
+            : string.Empty;
+
+        TasksHeader.Text = history
+            ? $"{_state.ViewingDate:d MMM yyyy} by task — click a row to add time"
+            : "Today by task — click a row to keep going";
+
+        TaskEmptyText.Text = history
+            ? $"Nothing logged on {_state.ViewingDate:d MMM yyyy} yet"
+            : "Nothing logged today yet";
+
+        StartButton.IsEnabled = !history;
+        StartButton.Opacity = history ? 0.4 : 1;
+        StopButton.IsEnabled = !history;
+        StopButton.Opacity = history ? 0.4 : 1;
+        TimerPanel.Opacity = history ? 0.45 : 1;
+        if (history)
+            TimerText.Text = "--:--:--";
+    }
+
     private void ReloadSelectors()
     {
         _suppressStart = true;
@@ -123,19 +158,26 @@ public partial class MainWindow : Window
     private void BindStatus()
     {
         StatusText.Text = _state.StatusText;
-        TimerText.Text = _state.ElapsedDisplay;
+        if (_state.IsHistoryMode)
+            TimerText.Text = "--:--:--";
+        else
+            TimerText.Text = _state.ElapsedDisplay;
     }
 
     private void RefreshTimer()
     {
-        _state.Tick();
-        TimerText.Text = _state.ElapsedDisplay;
-        RefreshTaskTotals();
         if (_positionDirty)
         {
             _positionDirty = false;
             SavePlacement();
         }
+
+        if (_state.IsHistoryMode)
+            return;
+
+        _state.Tick();
+        TimerText.Text = _state.ElapsedDisplay;
+        RefreshTaskTotals();
     }
 
     private void SavePlacement() =>
@@ -143,11 +185,16 @@ public partial class MainWindow : Window
 
     private void StateOnPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        Dispatcher.Invoke(BindStatus);
-        if (e.PropertyName is nameof(AppState.ActiveSession) or nameof(AppState.IsRunning))
-            _scheduler.OnSessionChanged();
-        if (e.PropertyName is nameof(AppState.ActiveSession))
-            QueueTaskRebuild();
+        Dispatcher.Invoke(() =>
+        {
+            BindStatus();
+            if (e.PropertyName is nameof(AppState.ActiveSession) or nameof(AppState.IsRunning))
+                _scheduler.OnSessionChanged();
+            if (e.PropertyName is nameof(AppState.ActiveSession))
+                QueueTaskRebuild();
+            if (e.PropertyName is nameof(AppState.IsHistoryMode) or nameof(AppState.ViewingDate))
+                ApplyModeUi();
+        });
     }
 
     // RefreshToday clears and refills TodayEntries, so coalesce those events into one rebuild.
@@ -166,13 +213,18 @@ public partial class MainWindow : Window
     /// <summary>Re-sorts the list. Only runs when entries change, never on the clock tick.</summary>
     private void RebuildTaskRows()
     {
-        var day = DateTime.Today;
+        var day = _state.ViewingDate;
         var summary = TaskTypeSummary.Build(_state.Settings.Entries, day, DateTime.UtcNow);
         _taskRowsDay = day;
 
         _taskRows.Clear();
         foreach (var row in summary)
-            _taskRows.Add(TaskTypeRowModel.From(row));
+        {
+            var model = TaskTypeRowModel.From(row);
+            model.IsExpanded = _expandedKeys.Contains(row.Key);
+            model.SyncSegments(row.Segments);
+            _taskRows.Add(model);
+        }
 
         ApplyTaskTotals(summary);
         var empty = _taskRows.Count == 0;
@@ -182,7 +234,7 @@ public partial class MainWindow : Window
 
     private void RefreshTaskTotals()
     {
-        if (_taskRowsDay != DateTime.Today)
+        if (_taskRowsDay != _state.ViewingDate)
         {
             RebuildTaskRows();
             return;
@@ -201,7 +253,7 @@ public partial class MainWindow : Window
     private void ApplyTaskTotals(IReadOnlyList<TaskTypeRow> summary)
     {
         var byKey = summary.ToDictionary(r => r.Key);
-        var session = _state.ActiveSession;
+        var session = _state.IsHistoryMode ? null : _state.ActiveSession;
         var activeKey = session is null
             ? null
             : TaskTypeSummary.KeyOf(session.TaskName, session.Category, session.JobCodeId, session.JobCodeText);
@@ -217,23 +269,42 @@ public partial class MainWindow : Window
             row.TotalText = DayTotals.FormatClock(current.Total);
             row.SegmentCount = current.SegmentCount;
             row.IsActive = row.Key == activeKey;
+            if (row.IsExpanded || row.IsActive)
+                row.SyncSegments(current.Segments);
         }
     }
 
     private void TaskRow_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         // Keep the window's drag handler from swallowing the click.
+        // Expand arrow has its own click handler — ignore presses that start there.
+        if (e.OriginalSource is DependencyObject d && FindAncestor<Button>(d) is not null)
+        {
+            _pressedRow = null;
+            return;
+        }
+
         _pressedRow = (sender as FrameworkElement)?.DataContext as TaskTypeRowModel;
         e.Handled = true;
     }
 
     private void TaskRow_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
+        if (e.OriginalSource is DependencyObject d && FindAncestor<Button>(d) is not null)
+            return;
+
         var pressed = _pressedRow;
         _pressedRow = null;
         if (sender is not FrameworkElement { DataContext: TaskTypeRowModel row } || !ReferenceEquals(row, pressed))
             return;
         e.Handled = true;
+
+        if (_state.IsHistoryMode)
+        {
+            PromptAddTime(row);
+            return;
+        }
+
         if (row.IsActive)
             return;
 
@@ -242,10 +313,145 @@ public partial class MainWindow : Window
             TaskTypeSummary.KeyOf(session.TaskName, session.Category, session.JobCodeId, session.JobCodeText) == row.Key)
             return;
 
+        ContinueTaskType(row);
+    }
+
+    private void ContinueTaskType(TaskTypeRowModel row)
+    {
         var code = _state.FindJobCode(row.JobCodeId);
         _state.StartOrSwitch(row.TaskName, row.Category, row.JobCodeId, code?.Display ?? row.JobCodeText);
         _scheduler.OnSessionChanged();
         BindStatus();
+    }
+
+    private void PromptAddTime(TaskTypeRowModel row)
+    {
+        var dialog = new AddTimeWindow(row.TaskName) { Owner = this };
+        if (dialog.ShowDialog() != true) return;
+
+        var code = _state.FindJobCode(row.JobCodeId);
+        _state.AddTimeToTaskType(
+            row.TaskName,
+            row.Category,
+            row.JobCodeId,
+            code?.Display ?? row.JobCodeText,
+            dialog.SelectedDuration);
+
+        row.IsExpanded = true;
+        _expandedKeys.Add(row.Key);
+        QueueTaskRebuild();
+        StatusText.Text = $"Added {FormatShortDuration(dialog.SelectedDuration)} to {row.TaskName}";
+    }
+
+    private void ExpandToggle_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: TaskTypeRowModel row }) return;
+
+        row.IsExpanded = !row.IsExpanded;
+        if (row.IsExpanded)
+        {
+            _expandedKeys.Add(row.Key);
+            var summary = TaskTypeSummary.Build(_state.Settings.Entries, _state.ViewingDate, DateTime.UtcNow);
+            var match = summary.FirstOrDefault(r => r.Key == row.Key);
+            if (match is not null)
+                row.SyncSegments(match.Segments);
+        }
+        else
+        {
+            _expandedKeys.Remove(row.Key);
+        }
+
+        e.Handled = true;
+    }
+
+    private void TaskRow_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        if (sender is not FrameworkElement { ContextMenu: { } menu, DataContext: TaskTypeRowModel row })
+            return;
+
+        foreach (var item in menu.Items.OfType<MenuItem>())
+        {
+            if (item.Header is string h &&
+                (h.StartsWith("Start timer", StringComparison.Ordinal) ||
+                 h.StartsWith("Continue", StringComparison.Ordinal)))
+            {
+                item.Header = row.SegmentCount > 0 ? "Continue" : "Start timer";
+                item.IsEnabled = !_state.IsHistoryMode && !row.IsActive;
+            }
+        }
+    }
+
+    private void AddTimeMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (!TryGetMenuRow(sender, out var row)) return;
+        PromptAddTime(row);
+    }
+
+    private void StartTaskMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (_state.IsHistoryMode) return;
+        if (!TryGetMenuRow(sender, out var row) || row.IsActive) return;
+        ContinueTaskType(row);
+    }
+
+    private void DeleteTaskMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (!TryGetMenuRow(sender, out var row)) return;
+
+        var confirm = MessageBox.Show(this,
+            $"Delete “{row.TaskName}” for {_state.ViewingDate:d MMM yyyy}?\n\nYou can restore it today from Menu → Restore deleted tasks.",
+            "Delete task",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (confirm != MessageBoxResult.Yes) return;
+
+        _expandedKeys.Remove(row.Key);
+        _state.SoftDeleteTaskType(row.Key);
+        QueueTaskRebuild();
+        BindStatus();
+        StatusText.Text = $"Deleted {row.TaskName} (restorable today)";
+    }
+
+    private static bool TryGetMenuRow(object sender, out TaskTypeRowModel row)
+    {
+        row = null!;
+        if (sender is MenuItem item)
+        {
+            if (item.CommandParameter is TaskTypeRowModel fromParam)
+            {
+                row = fromParam;
+                return true;
+            }
+
+            if (item.DataContext is TaskTypeRowModel fromContext)
+            {
+                row = fromContext;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static T? FindAncestor<T>(DependencyObject current) where T : DependencyObject
+    {
+        while (current is not null)
+        {
+            if (current is T match) return match;
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return null;
+    }
+
+    private static string FormatShortDuration(TimeSpan d)
+    {
+        if (d.TotalHours >= 1)
+            return $"{(int)d.TotalHours}h {d.Minutes:00}m";
+        if (d.TotalMinutes >= 1)
+            return $"{(int)d.TotalMinutes}m";
+        return $"{d.Seconds}s";
     }
 
     private void TaskScroll_ScrollChanged(object sender, ScrollChangedEventArgs e)
@@ -269,10 +475,15 @@ public partial class MainWindow : Window
             _state.Settings.FifteenMinuteIntervalMinutes);
     }
 
-    private void Start_Click(object sender, RoutedEventArgs e) => TryStartFromInputs();
+    private void Start_Click(object sender, RoutedEventArgs e)
+    {
+        if (_state.IsHistoryMode) return;
+        TryStartFromInputs();
+    }
 
     private void Stop_Click(object sender, RoutedEventArgs e)
     {
+        if (_state.IsHistoryMode) return;
         _state.StopActive(save: true);
         _scheduler.OnSessionChanged();
         BindStatus();
@@ -280,7 +491,7 @@ public partial class MainWindow : Window
 
     private void JobCodeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_suppressStart) return;
+        if (_suppressStart || _state.IsHistoryMode) return;
         if (JobCodeCombo.SelectedItem is not JobCode code) return;
 
         // Selecting a job code starts the timer; task name optional.
@@ -295,13 +506,16 @@ public partial class MainWindow : Window
     {
         if (e.Key == Key.Enter)
         {
-            TryStartFromInputs();
+            if (!_state.IsHistoryMode)
+                TryStartFromInputs();
             e.Handled = true;
         }
     }
 
     private void TryStartFromInputs()
     {
+        if (_state.IsHistoryMode) return;
+
         var task = TaskNameCombo.Text?.Trim() ?? string.Empty;
         var category = CategoryCombo.Text?.Trim() ?? "General";
         var code = JobCodeCombo.SelectedItem as JobCode;
@@ -353,7 +567,13 @@ public partial class MainWindow : Window
                 foreach (var fav in group.OrderBy(f => f.Name))
                 {
                     var item = new MenuItem { Header = fav.Name, Tag = fav };
-                    item.Click += (_, _) => StartFavorite(fav);
+                    item.Click += (_, _) =>
+                    {
+                        if (_state.IsHistoryMode)
+                            PromptAddTimeForFavorite(fav);
+                        else
+                            StartFavorite(fav);
+                    };
                     menu.Items.Add(item);
                 }
             }
@@ -370,6 +590,12 @@ public partial class MainWindow : Window
 
     private void StartFavorite(FavoriteTask fav)
     {
+        if (_state.IsHistoryMode)
+        {
+            PromptAddTimeForFavorite(fav);
+            return;
+        }
+
         var code = _state.FindJobCode(fav.JobCodeId);
         _suppressStart = true;
         TaskNameCombo.Text = fav.Name;
@@ -381,6 +607,22 @@ public partial class MainWindow : Window
         _state.StartOrSwitch(fav.Name, fav.Category, code);
         _scheduler.OnSessionChanged();
         BindStatus();
+    }
+
+    private void PromptAddTimeForFavorite(FavoriteTask fav)
+    {
+        var dialog = new AddTimeWindow(fav.Name) { Owner = this };
+        if (dialog.ShowDialog() != true) return;
+
+        var code = _state.FindJobCode(fav.JobCodeId);
+        _state.AddTimeToTaskType(
+            fav.Name,
+            fav.Category,
+            fav.JobCodeId,
+            code?.Display ?? string.Empty,
+            dialog.SelectedDuration);
+        QueueTaskRebuild();
+        StatusText.Text = $"Added {FormatShortDuration(dialog.SelectedDuration)} to {fav.Name}";
     }
 
     private void Settings_Click(object sender, RoutedEventArgs e) => OpenSettings(false);
@@ -396,22 +638,82 @@ public partial class MainWindow : Window
 
     private void DayLog_Click(object sender, RoutedEventArgs e)
     {
-        var win = new DayLogWindow { Owner = this };
+        var win = new DayLogWindow(_state.ViewingDate) { Owner = this };
         win.ShowDialog();
+        QueueTaskRebuild();
     }
 
     private void Menu_Click(object sender, RoutedEventArgs e)
     {
         var menu = new ContextMenu();
+
         var weeks = new MenuItem { Header = "Weeks & export…" };
         weeks.Click += (_, _) => OpenWeekBrowser();
         menu.Items.Add(weeks);
+
         var jobCodes = new MenuItem { Header = "Job code view" };
         jobCodes.Click += (_, _) => OpenJobCodeView();
         menu.Items.Add(jobCodes);
+
+        menu.Items.Add(new Separator());
+
+        var addCode = new MenuItem { Header = "Add job code…" };
+        addCode.Click += (_, _) =>
+        {
+            var win = new QuickAddJobCodeWindow { Owner = this };
+            if (win.ShowDialog() == true)
+                ReloadSelectors();
+        };
+        menu.Items.Add(addCode);
+
+        var restore = new MenuItem { Header = "Restore deleted tasks…" };
+        restore.Click += (_, _) =>
+        {
+            var win = new RestoreDeletedWindow { Owner = this };
+            if (win.ShowDialog() == true)
+                QueueTaskRebuild();
+        };
+        menu.Items.Add(restore);
+
+        menu.Items.Add(new Separator());
+
+        var load = new MenuItem { Header = "Load timesheet…" };
+        load.Click += (_, _) => LoadTimesheet();
+        menu.Items.Add(load);
+
+        if (_state.IsHistoryMode)
+        {
+            var today = new MenuItem { Header = "Back to today" };
+            today.Click += (_, _) => BackToToday_Click(today, new RoutedEventArgs());
+            menu.Items.Add(today);
+        }
+
         menu.PlacementTarget = sender as UIElement;
         menu.Placement = PlacementMode.Bottom;
         menu.IsOpen = true;
+    }
+
+    private void LoadTimesheet()
+    {
+        var win = new LoadTimesheetWindow { Owner = this };
+        if (win.ShowDialog() != true) return;
+
+        if (win.SelectedDay.Date == DateTime.Today)
+            _state.ExitHistoryMode();
+        else
+            _state.EnterHistoryMode(win.SelectedDay);
+
+        ApplyModeUi();
+        QueueTaskRebuild();
+        BindStatus();
+    }
+
+    private void BackToToday_Click(object sender, RoutedEventArgs e)
+    {
+        _state.ExitHistoryMode();
+        ApplyModeUi();
+        QueueTaskRebuild();
+        BindStatus();
     }
 
     private void OpenWeekBrowser()
@@ -438,7 +740,7 @@ public partial class MainWindow : Window
 
     private void OnScreenUnlocked(LockIntervalSplit.Snapshot snapshot, DateTime unlockedAtUtc, TimeSpan lockedFor)
     {
-        if (_closing)
+        if (_closing || _state.IsHistoryMode)
             return;
 
         var code = string.IsNullOrWhiteSpace(snapshot.JobCodeText)
@@ -473,6 +775,7 @@ public partial class MainWindow : Window
 
     private void ShowRecheck()
     {
+        if (_state.IsHistoryMode) return;
         if (_scheduler.RecheckOpen || _state.ActiveSession is null) return;
         _scheduler.RecheckOpen = true;
         try
@@ -496,6 +799,7 @@ public partial class MainWindow : Window
     {
         Dispatcher.Invoke(() =>
         {
+            if (_state.IsHistoryMode) return;
             if (_scheduler.FifteenOpen || _scheduler.RecheckOpen) return;
 
             var gap = _state.MeasureCatchUpWindow();
@@ -595,6 +899,14 @@ public partial class MainWindow : Window
     }
 }
 
+public sealed class TaskSegmentRowModel
+{
+    public Guid EntryId { get; init; }
+    public string TimeOfDay { get; init; } = string.Empty;
+    public string DurationDisplay { get; init; } = string.Empty;
+    public bool IsRunning { get; init; }
+}
+
 public sealed class TaskTypeRowModel : INotifyPropertyChanged
 {
     public required string Key { get; init; }
@@ -603,6 +915,7 @@ public sealed class TaskTypeRowModel : INotifyPropertyChanged
     public required Guid? JobCodeId { get; init; }
     public required string JobCodeText { get; init; }
     public string JobCodeDisplay => string.IsNullOrWhiteSpace(JobCodeText) ? "—" : JobCodeText;
+    public ObservableCollection<TaskSegmentRowModel> Children { get; } = [];
 
     public static TaskTypeRowModel From(TaskTypeRow row) => new()
     {
@@ -612,6 +925,23 @@ public sealed class TaskTypeRowModel : INotifyPropertyChanged
         JobCodeId = row.JobCodeId,
         JobCodeText = row.JobCodeText
     };
+
+    public void SyncSegments(IReadOnlyList<TaskSegment> segments)
+    {
+        Children.Clear();
+        foreach (var segment in segments)
+        {
+            Children.Add(new TaskSegmentRowModel
+            {
+                EntryId = segment.EntryId,
+                TimeOfDay = segment.StartUtc.ToLocalTime().ToString("HH:mm"),
+                DurationDisplay = DayTotals.FormatClock(segment.Duration),
+                IsRunning = segment.IsRunning
+            });
+        }
+
+        OnPropertyChanged(nameof(ChildrenVisibility));
+    }
 
     private string _totalText = "00:00:00";
     public string TotalText
@@ -634,13 +964,34 @@ public sealed class TaskTypeRowModel : INotifyPropertyChanged
         set => Set(ref _isActive, value);
     }
 
+    private bool _isExpanded;
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        set
+        {
+            if (!Set(ref _isExpanded, value)) return;
+            OnPropertyChanged(nameof(ArrowGlyph));
+            OnPropertyChanged(nameof(ChildrenVisibility));
+        }
+    }
+
+    public string ArrowGlyph => IsExpanded ? "▼" : "▶";
+
+    public Visibility ChildrenVisibility =>
+        IsExpanded && Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    private void Set<T>(ref T field, T value, [CallerMemberName] string? name = null)
+    private bool Set<T>(ref T field, T value, [CallerMemberName] string? name = null)
     {
         if (EqualityComparer<T>.Default.Equals(field, value))
-            return;
+            return false;
         field = value;
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        return true;
     }
+
+    private void OnPropertyChanged(string name) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }

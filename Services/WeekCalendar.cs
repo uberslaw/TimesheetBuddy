@@ -65,6 +65,8 @@ public static class WeekCalendar
 
         foreach (var entry in entries)
         {
+            if (entry.IsDeleted) continue;
+
             var monday = MondayOf(entry.StartUtc.ToLocalTime());
             if (!grouped.TryGetValue(monday, out var list))
             {

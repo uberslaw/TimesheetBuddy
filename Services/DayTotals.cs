@@ -16,7 +16,7 @@ public static class DayTotals
         var total = TimeSpan.Zero;
         foreach (var entry in entries)
         {
-            if (entry.JobCodeId != jobCodeId) continue;
+            if (entry.IsDeleted || entry.JobCodeId != jobCodeId) continue;
             total += DurationAt(entry, utcNow);
         }
 
@@ -27,7 +27,11 @@ public static class DayTotals
     {
         var total = TimeSpan.Zero;
         foreach (var entry in entries)
+        {
+            if (entry.IsDeleted) continue;
             total += DurationAt(entry, utcNow);
+        }
+
         return total;
     }
 

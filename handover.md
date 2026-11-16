@@ -37,10 +37,14 @@ TimesheetBuddy/
 │   ├── SettingsWindow.*            # Job codes, favorites, categories, prompts
 │   ├── RecheckWindow.*             # “Still working on X?”
 │   ├── FifteenMinuteWindow.*       # Assign tasks to unaccounted minutes (Not now cancels)
-│   ├── DayLogWindow.*              # Today’s entries + day notes
+│   ├── DayLogWindow.*              # Viewing-day entries + day notes
 │   ├── ManualEntryWindow.*         # Manual add from day log
+│   ├── AddTimeWindow.*             # HH:MM add-time dialog (no live timer)
+│   ├── RestoreDeletedWindow.*      # Same-day restore of soft-deleted task types
+│   ├── LoadTimesheetWindow.*       # Calendar picker for history mode
+│   ├── QuickAddJobCodeWindow.*     # Menu → Add job code (code + description)
 │   ├── JobCodeViewWindow.*         # Alternate row-per-code timer view
-│   ├── AddJobCodeWindow.*          # Add an existing code or create one
+│   ├── AddJobCodeWindow.*          # Job-code view: add existing or create one
 │   └── LockPromptWindow.*          # Assign locked minutes, or count them as break
 ├── README.md
 └── handover.md                     # This file
@@ -66,16 +70,21 @@ Requires [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) on Win
 | Feature | Where |
 |---------|--------|
 | Window size (~2× tray width, fixed; height resizable, saved) | `MainWindow.ApplyCompactSize()` |
-| Today by task (cumulative rows; click to continue) | `MainWindow` + `Services/TaskTypeSummary` |
+| Today by task (expandable cumulative rows; click to continue) | `MainWindow` + `Services/TaskTypeSummary` |
+| Expand ▶/▼ → per-segment HH:mm + duration | `TaskTypeRowModel.Children` from `TaskSegment` |
+| Right-click → Add time / Start|Continue / Delete | `MainWindow` context menu + `AddTimeWindow` |
+| Soft-delete + same-day restore | `TimeEntry.IsDeleted` / `DeletedAtLocal` + `RestoreDeletedWindow` |
+| Load older timesheet (history mode) | `AppState.ViewingDate` / `IsHistoryMode` + `LoadTimesheetWindow` |
 | Pin / always on top | Pin toggle → `AppState.UpdatePromptSettings` |
-| Start timer from job code / task / Enter | `MainWindow` selection + Start handlers |
+| Start timer from job code / task / Enter | `MainWindow` selection + Start handlers (disabled in history) |
 | Stop timer | Stop button → `AppState.StopActive` |
 | Quick-add favorites menu | `MainWindow.QuickAdd_Click` |
+| Menu → Add job code… | `Views/QuickAddJobCodeWindow` → `AppState.AddJobCode` |
 | Settings (codes, favorites, categories, intervals) | `Views/SettingsWindow` |
-| Still-working recheck popup | `PromptScheduler` → `Views/RecheckWindow` |
+| Still-working recheck popup | `PromptScheduler` → `Views/RecheckWindow` (skipped in history) |
 | Catch-up prompt (only when minutes are unaccounted; Not now dismisses) | `PromptScheduler` → `UnaccountedTime` → `Views/FifteenMinuteWindow` or `RecheckWindow` |
-| Day log + free-form day notes | `Views/DayLogWindow` |
-| Manual time entry | `Views/ManualEntryWindow` |
+| Day log + free-form day notes | `Views/DayLogWindow` (uses `ViewingDate`) |
+| Manual time entry | `Views/ManualEntryWindow` (lands on `ViewingDate`) |
 | Job code view (switch from the Menu; Compact tracker returns) | `Views/JobCodeViewWindow` |
 | Screen-lock prompt while a timer is running | `ScreenLockWatcher` → `Views/LockPromptWindow` |
 
@@ -93,7 +102,9 @@ Closing the app while a timer is running saves that task onto the current day's 
 
 **Job code view.** Menu → Job code view opens a taller window with one row per code. Click a row to run the timer on that code (the row turns green); Stop ends it for the whole view. Each row shows today’s time for that code, including the live timer, and the footer total is every entry logged today. Add inserts an existing code or creates a code plus description. Remove only changes the saved row list (`AppSettings.JobCodeViewIds`); it does not delete time entries. Until the user adds or removes a row, the view lists the active codes.
 
-**Today by task (main window).** Below the inputs, the compact tracker lists today's work with one row per task type: task name + category + job code. Name and category match case-insensitively; the code matches on `JobCodeId`, or on the code text when an entry has no id. Every entry logged today joins its row automatically (timer, manual, catch-up, lock-split slices, Break). Columns: task, category, job code, total today (`hh:mm:ss`, including the live timer), and the number of segments in that total. Click a row to start the timer on that same task type (`AppState.StartOrSwitch`, which saves any running entry first); the new segment adds to the row and its count goes up. Clicking the row that is already running does nothing. The running row is green, like the job-code view. Stop stays on the main Stop button. Rows are ordered by most recent start and only re-sort when entries change, not on the one-second tick. The window is now height-resizable (fixed compact width, default up to 480 px tall, minimum 300); the height is saved with the position (`AppSettings.WindowHeight`), and NaN or infinite values are never written. Check: `dotnet run --project tests/TaskTypeSummaryCheck`.
+**Today by task (main window).** Below the inputs, the compact tracker lists the viewing day's work with one row per task type: task name + category + job code. Name and category match case-insensitively; the code matches on `JobCodeId`, or on the code text when an entry has no id. Every non-deleted entry logged that day joins its row automatically (timer, manual, add-time, catch-up, lock-split slices, Break). Columns: expand arrow, task, category, job code, total (`hh:mm:ss`, including the live timer), and the number of segments. ▶/▼ expands indented child rows for each segment (local HH:mm + duration, chronological); parent rows on either side stay visible. Click a parent row to continue that task type (`AppState.StartOrSwitch`); the expand arrow does not start a timer. Right-click offers Add time… (finished manual segment, no live timer), Start timer / Continue, and Delete task. Soft-delete sets `TimeEntry.IsDeleted` + `DeletedAtLocal` on all of that type's entries for the viewing day (and stops the timer if that type is active). Deleted entries are filtered out of TaskTypeSummary, EntriesForDay, UnaccountedTime, WeekCalendar, and DayTotals. Purge removes soft-deleted entries whose `DeletedAtLocal.Date` is before today on load/save. Menu → Restore deleted tasks… restores today's groups. Rows are ordered by most recent start and only re-sort when entries change, not on the one-second tick. Check: `dotnet run --project tests/TaskTypeSummaryCheck`.
+
+**History mode.** Menu → Load timesheet… opens a calendar (no future dates). Entering another day stops any active timer, sets `AppState.ViewingDate` / `IsHistoryMode`, shows a yellow banner (“Editing {date} — timer inactive” + Back to today), and disables Start/Stop/job-code auto-start. Row clicks open Add time instead of starting a timer. Manual and Add time entries land on `ViewingDate` (end at that day's clock time-of-day equivalent). `PromptScheduler` does not fire recheck/fifteen while `IsHistoryMode`. Menu → Back to today (or the banner button) calls `ExitHistoryMode()`.
 
 **Screen lock.** If Windows locks the session while a timer is running, unlock (after at least one minute) asks whether those minutes stay on the current code, move to another code, or count as break. Break is a finished entry named Break in category Break, not a new job code. Moving the interval leaves the time before the lock on the original code and continues that code from the unlock moment, so the locked minutes are not counted twice. A lock under one minute, or a lock while the timer is idle, does not prompt.
 

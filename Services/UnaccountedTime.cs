@@ -51,7 +51,7 @@ public static class UnaccountedTime
 
         foreach (var entry in entries ?? [])
         {
-            if (entry is null) continue;
+            if (entry is null || entry.IsDeleted) continue;
 
             var isActive = activeSession is not null && entry.Id == activeSession.EntryId;
             if (!TryEntryInterval(entry, isActive, activeSession, nowUtc, out var start, out var end))

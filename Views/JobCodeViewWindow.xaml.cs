@@ -92,6 +92,8 @@ public partial class JobCodeViewWindow : Window
 
     private void Row_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
+        if (_state.IsHistoryMode)
+            return;
         if (IsFromButton(e.OriginalSource as DependencyObject))
             return;
         if (sender is not FrameworkElement { DataContext: JobCodeRowModel row })

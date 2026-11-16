@@ -30,6 +30,10 @@ Check(merged.Count == 1, "two segments of the same task type make one row");
 Check(merged[0].SegmentCount == 2, "that row counts 2 segments");
 Check(merged[0].Total == TimeSpan.FromMinutes(75), "that row totals 30 + 45 minutes");
 Check(merged[0].TaskName == "write REPORT", "row shows the most recent segment's name");
+Check(merged[0].Segments.Count == 2, "row exposes both segments");
+Check(merged[0].Segments[0].StartUtc < merged[0].Segments[1].StartUtc, "segments are chronological");
+Check(merged[0].Segments[0].Duration == TimeSpan.FromMinutes(30), "first segment duration is 30 minutes");
+Check(!merged[0].Segments.Any(s => s.IsRunning), "closed segments are not running");
 
 // Different category or job code makes separate rows.
 var split = TaskTypeSummary.Build(
@@ -71,8 +75,22 @@ var live = TaskTypeSummary.Build(
 ], today, clock);
 Check(live.Count == 1 && live[0].SegmentCount == 2, "the running segment counts once");
 Check(live[0].Total == TimeSpan.FromMinutes(100), "row total is 60 closed + 40 live minutes");
+Check(live[0].Segments.Count(s => s.IsRunning) == 1, "exactly one segment is marked running");
+Check(live[0].Segments.Last(s => s.IsRunning).EntryId == running.Id, "running segment keeps its entry id");
 var later = TaskTypeSummary.Build([running], today, clock.AddSeconds(30));
 Check(later[0].Total == TimeSpan.FromMinutes(40.5), "live time follows the clock");
+
+// Soft-deleted entries are skipped.
+var deleted = Entry("Write report", "Development", dev, "DEV", Local(2026, 11, 11, 9), Local(2026, 11, 11, 10));
+deleted.IsDeleted = true;
+deleted.DeletedAtLocal = Local(2026, 11, 11, 16).ToLocalTime();
+var withDeleted = TaskTypeSummary.Build(
+[
+    deleted,
+    Entry("Write report", "Development", dev, "DEV", Local(2026, 11, 11, 11), Local(2026, 11, 11, 11, 15))
+], today, clock);
+Check(withDeleted.Count == 1 && withDeleted[0].SegmentCount == 1, "soft-deleted entries are left out");
+Check(withDeleted[0].Total == TimeSpan.FromMinutes(15), "only the live entry is summed");
 
 // Manual-minute entries count their ManualMinutes.
 var manual = Entry("Write report", "Development", dev, "DEV", Local(2026, 11, 11, 8), Local(2026, 11, 11, 8, 5));

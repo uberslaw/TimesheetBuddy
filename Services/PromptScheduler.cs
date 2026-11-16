@@ -81,6 +81,7 @@ public sealed class PromptScheduler
 
     private void CheckRecheck()
     {
+        if (_state.IsHistoryMode) return;
         if (RecheckOpen || FifteenOpen) return;
         if (!_state.Settings.RecheckPromptEnabled) return;
         if (_state.ActiveSession is null) return;
@@ -91,6 +92,7 @@ public sealed class PromptScheduler
 
     private void CheckFifteen()
     {
+        if (_state.IsHistoryMode) return;
         if (FifteenOpen || RecheckOpen) return;
         if (!_state.Settings.FifteenMinutePromptEnabled) return;
         if (DateTime.UtcNow < _nextFifteenUtc) return;

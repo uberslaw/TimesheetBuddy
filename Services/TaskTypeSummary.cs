@@ -3,6 +3,15 @@ using TimesheetBuddy.Models;
 namespace TimesheetBuddy.Services;
 
 /// <summary>
+/// One finished or running segment under a task-type row, ordered chronologically.
+/// </summary>
+public sealed record TaskSegment(
+    Guid EntryId,
+    DateTime StartUtc,
+    TimeSpan Duration,
+    bool IsRunning);
+
+/// <summary>
 /// One row of the main window's cumulative list: every entry logged on a day that shares
 /// a task name, category, and job code.
 /// </summary>
@@ -14,7 +23,8 @@ public sealed record TaskTypeRow(
     string JobCodeText,
     TimeSpan Total,
     int SegmentCount,
-    DateTime LastStartUtc);
+    DateTime LastStartUtc,
+    IReadOnlyList<TaskSegment> Segments);
 
 public static class TaskTypeSummary
 {
@@ -46,7 +56,8 @@ public static class TaskTypeSummary
 
     /// <summary>
     /// Rows for <paramref name="dayLocal"/>, most recently started first. An open entry
-    /// (the running timer) is measured up to <paramref name="utcNow"/>.
+    /// (the running timer) is measured up to <paramref name="utcNow"/>. Soft-deleted
+    /// entries are skipped.
     /// </summary>
     public static List<TaskTypeRow> Build(IEnumerable<TimeEntry> entries, DateTime dayLocal, DateTime utcNow)
     {
@@ -54,7 +65,7 @@ public static class TaskTypeSummary
         var seen = new HashSet<Guid>();
         foreach (var entry in entries)
         {
-            if (!IsOnDay(entry, dayLocal) || !seen.Add(entry.Id))
+            if (entry.IsDeleted || !IsOnDay(entry, dayLocal) || !seen.Add(entry.Id))
                 continue;
 
             var key = KeyOf(entry);
@@ -68,8 +79,17 @@ public static class TaskTypeSummary
         {
             var latest = list.MaxBy(e => e.StartUtc)!;
             var total = TimeSpan.Zero;
-            foreach (var entry in list)
-                total += DayTotals.DurationAt(entry, utcNow);
+            var segments = new List<TaskSegment>(list.Count);
+            foreach (var entry in list.OrderBy(e => e.StartUtc))
+            {
+                var duration = DayTotals.DurationAt(entry, utcNow);
+                total += duration;
+                segments.Add(new TaskSegment(
+                    entry.Id,
+                    entry.StartUtc,
+                    duration,
+                    IsRunning: entry.EndUtc is null && entry.ManualMinutes <= 0));
+            }
 
             rows.Add(new TaskTypeRow(
                 key,
@@ -79,7 +99,8 @@ public static class TaskTypeSummary
                 latest.JobCodeText.Trim(),
                 total,
                 list.Count,
-                latest.StartUtc));
+                latest.StartUtc,
+                segments));
         }
 
         return rows

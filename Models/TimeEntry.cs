@@ -11,7 +11,9 @@ public sealed class TimeEntry
     public string JobCodeText { get; set; } = string.Empty;
     public string Notes { get; set; } = string.Empty;
     public int ManualMinutes { get; set; }
-    public string Source { get; set; } = "timer"; // timer | fifteen | manual
+    public string Source { get; set; } = "timer"; // timer | fifteen | manual | add-time
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAtLocal { get; set; }
 
     public TimeSpan Duration
     {
