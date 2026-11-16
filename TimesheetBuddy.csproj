@@ -11,12 +11,17 @@
     <RootNamespace>TimesheetBuddy</RootNamespace>
     <Version>3.0.0</Version>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ApplicationIcon>Assets\TimesheetBuddy.ico</ApplicationIcon>
     <DefaultItemExcludes>$(DefaultItemExcludes);tests/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="ClosedXML" Version="0.105.1" />
     <PackageReference Include="QuestPDF" Version="2026.9.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\TimesheetBuddy.ico" />
   </ItemGroup>
 
 </Project>

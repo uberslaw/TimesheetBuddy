@@ -46,7 +46,7 @@ TimesheetBuddy/
 └── handover.md                     # This file
 ```
 
-Empty `Assets/` and `Converters/` folders exist for future use.
+`Assets/TimesheetBuddy.ico` is the hourglass app icon (exe via `ApplicationIcon`, every window via `Icon="/Assets/TimesheetBuddy.ico"`); regenerate it with `python tools/make_icon.py` (needs Pillow). An empty `Converters/` folder exists for future use.
 
 ## How to run
 
@@ -116,7 +116,7 @@ Other reasonable next steps if needed:
 - Edit/delete historical entries in the day log
 - System tray icon / minimize-to-tray
 - Installer / single-file publish (`dotnet publish -c Release -r win-x64 --self-contained`)
-- Wire empty `Assets/` (app icon) and `Converters/` if binding converters are added
+- Wire empty `Converters/` if binding converters are added
 
 ## Smoke-test checklist
 
