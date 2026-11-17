@@ -25,7 +25,7 @@ public partial class MainWindow : Window
     private TaskTypeRowModel? _pressedRow;
     private DateTime _taskRowsDay = DateTime.Today;
     private bool _taskRebuildQueued;
-    private bool _suppressStart;
+    private bool _jobCodeLockedFromList;
     private bool _positionDirty;
     private bool _closing;
 
@@ -133,13 +133,26 @@ public partial class MainWindow : Window
         StopButton.IsEnabled = !history;
         StopButton.Opacity = history ? 0.4 : 1;
         TimerPanel.Opacity = history ? 0.45 : 1;
+        ApplyJobCodeEditability();
         if (history)
             TimerText.Text = "--:--:--";
     }
 
+    private void ApplyJobCodeEditability()
+    {
+        // List selection locks the job code; new tasks (Start) can pick freely.
+        JobCodeCombo.IsEnabled = !_state.IsHistoryMode && !_jobCodeLockedFromList;
+        JobCodeCombo.Opacity = JobCodeCombo.IsEnabled ? 1 : 0.7;
+    }
+
+    private void LockJobCodeFromList(bool locked)
+    {
+        _jobCodeLockedFromList = locked;
+        ApplyJobCodeEditability();
+    }
+
     private void ReloadSelectors()
     {
-        _suppressStart = true;
         JobCodeCombo.ItemsSource = _state.JobCodes.Where(j => j.IsActive).ToList();
         CategoryCombo.ItemsSource = _state.Categories.ToList();
         TaskNameCombo.ItemsSource = _state.FavoriteTasks
@@ -151,8 +164,8 @@ public partial class MainWindow : Window
         if (CategoryCombo.Items.Count > 0 && CategoryCombo.SelectedItem is null)
             CategoryCombo.SelectedIndex = 0;
 
-        _suppressStart = false;
         BindStatus();
+        ApplyJobCodeEditability();
     }
 
     private void BindStatus()
@@ -299,21 +312,43 @@ public partial class MainWindow : Window
             return;
         e.Handled = true;
 
+        // Always mirror the row into the top editors (job code read-only).
+        FillEditorsFromRow(row);
+
         if (_state.IsHistoryMode)
         {
             PromptAddTime(row);
             return;
         }
 
-        if (row.IsActive)
-            return;
-
         var session = _state.ActiveSession;
-        if (session is not null &&
-            TaskTypeSummary.KeyOf(session.TaskName, session.Category, session.JobCodeId, session.JobCodeText) == row.Key)
+        var alreadyActive = row.IsActive ||
+            (session is not null &&
+             TaskTypeSummary.KeyOf(session.TaskName, session.Category, session.JobCodeId, session.JobCodeText) == row.Key);
+        if (alreadyActive)
             return;
 
         ContinueTaskType(row);
+    }
+
+    private void FillEditorsFromRow(TaskTypeRowModel row)
+    {
+        TaskNameCombo.Text = row.TaskName;
+        CategoryCombo.Text = row.Category;
+
+        var code = _state.FindJobCode(row.JobCodeId);
+        if (code is not null)
+        {
+            JobCodeCombo.SelectedItem = _state.JobCodes.FirstOrDefault(j => j.Id == code.Id);
+        }
+        else
+        {
+            // Keep a display value even if the code was removed from the catalog.
+            JobCodeCombo.SelectedItem = null;
+            JobCodeCombo.Text = string.IsNullOrWhiteSpace(row.JobCodeText) ? string.Empty : row.JobCodeText;
+        }
+
+        LockJobCodeFromList(true);
     }
 
     private void ContinueTaskType(TaskTypeRowModel row)
@@ -322,6 +357,7 @@ public partial class MainWindow : Window
         _state.StartOrSwitch(row.TaskName, row.Category, row.JobCodeId, code?.Display ?? row.JobCodeText);
         _scheduler.OnSessionChanged();
         BindStatus();
+        FillEditorsFromRow(row);
     }
 
     private void PromptAddTime(TaskTypeRowModel row)
@@ -487,19 +523,7 @@ public partial class MainWindow : Window
         _state.StopActive(save: true);
         _scheduler.OnSessionChanged();
         BindStatus();
-    }
-
-    private void JobCodeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_suppressStart || _state.IsHistoryMode) return;
-        if (JobCodeCombo.SelectedItem is not JobCode code) return;
-
-        // Selecting a job code starts the timer; task name optional.
-        var task = TaskNameCombo.Text?.Trim() ?? string.Empty;
-        var category = CategoryCombo.Text?.Trim() ?? "General";
-        _state.StartOrSwitch(task, category, code);
-        _scheduler.OnSessionChanged();
-        BindStatus();
+        LockJobCodeFromList(false);
     }
 
     private void TaskNameCombo_KeyDown(object sender, KeyEventArgs e)
@@ -520,8 +544,9 @@ public partial class MainWindow : Window
         var category = CategoryCombo.Text?.Trim() ?? "General";
         var code = JobCodeCombo.SelectedItem as JobCode;
 
-        // If typed task matches a favorite, inherit its job code when none selected.
-        if (code is null && !string.IsNullOrWhiteSpace(task))
+        // If typed task matches a favorite, inherit its job code when none selected
+        // and the combo is not locked from a list selection.
+        if (code is null && !_jobCodeLockedFromList && !string.IsNullOrWhiteSpace(task))
         {
             var fav = _state.FavoriteTasks.FirstOrDefault(f =>
                 string.Equals(f.Name, task, StringComparison.OrdinalIgnoreCase));
@@ -531,27 +556,35 @@ public partial class MainWindow : Window
                 if (!string.IsNullOrWhiteSpace(fav.Category))
                     category = fav.Category;
                 if (code is not null)
-                {
-                    _suppressStart = true;
                     JobCodeCombo.SelectedItem = _state.JobCodes.FirstOrDefault(j => j.Id == code.Id);
-                    _suppressStart = false;
-                }
             }
         }
 
-        if (string.IsNullOrWhiteSpace(task) && code is null)
+        if (string.IsNullOrWhiteSpace(task))
         {
-            MessageBox.Show(this, "Pick a job code or enter a task name to start timing.",
+            MessageBox.Show(this, "Enter a task name, then press Start.",
                 "Timesheet Buddy", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
-        _state.StartOrSwitch(task, category, code);
+        if (code is null && string.IsNullOrWhiteSpace(JobCodeCombo.Text))
+        {
+            MessageBox.Show(this, "Pick a job code, then press Start.",
+                "Timesheet Buddy", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        if (code is not null)
+            _state.StartOrSwitch(task, category, code);
+        else
+            _state.StartOrSwitch(task, category, null, JobCodeCombo.Text?.Trim() ?? string.Empty);
+
         _scheduler.OnSessionChanged();
         BindStatus();
 
-        // Ready for the next task name after Enter / Start.
+        // Ready for the next new task after Enter / Start.
         TaskNameCombo.Text = string.Empty;
+        LockJobCodeFromList(false);
     }
 
     private void QuickAdd_Click(object sender, RoutedEventArgs e)
@@ -600,12 +633,11 @@ public partial class MainWindow : Window
         }
 
         var code = _state.FindJobCode(fav.JobCodeId);
-        _suppressStart = true;
         TaskNameCombo.Text = fav.Name;
         CategoryCombo.Text = fav.Category;
         if (code is not null)
             JobCodeCombo.SelectedItem = _state.JobCodes.FirstOrDefault(j => j.Id == code.Id);
-        _suppressStart = false;
+        LockJobCodeFromList(true);
 
         _state.StartOrSwitch(fav.Name, fav.Category, code);
         _scheduler.OnSessionChanged();

@@ -120,7 +120,8 @@
                 <StackPanel Grid.Row="0" Grid.Column="0">
                     <TextBlock Text="Job code" Foreground="{StaticResource MutedBrush}" FontSize="10" Margin="0,0,0,2"/>
                     <ComboBox x:Name="JobCodeCombo" DisplayMemberPath="Display"
-                              SelectionChanged="JobCodeCombo_SelectionChanged"/>
+                              IsEditable="True"
+                              ToolTip="Choose a job code, then press Start to begin tracking"/>
                 </StackPanel>
 
                 <StackPanel Grid.Row="0" Grid.Column="2">
