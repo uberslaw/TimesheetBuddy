@@ -509,6 +509,26 @@ public sealed class AppState : INotifyPropertyChanged
             choice,
             targetCode);
 
+        return ApplyLockResult(result);
+    }
+
+    public bool ApplyScreenLockAssignments(
+        LockIntervalSplit.Snapshot snapshot,
+        DateTime unlockedAtUtc,
+        IReadOnlyList<LockIntervalSplit.AssignmentSlice> slices)
+    {
+        var result = LockIntervalSplit.ApplyAssignments(
+            _settings.Entries,
+            ActiveSession,
+            snapshot,
+            unlockedAtUtc,
+            slices);
+
+        return ApplyLockResult(result);
+    }
+
+    private bool ApplyLockResult(LockIntervalSplit.Result result)
+    {
         if (!result.Applied)
             return false;
 
@@ -526,6 +546,60 @@ public sealed class AppState : INotifyPropertyChanged
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Renames/recategorizes every non-deleted entry of <paramref name="key"/> on
+    /// <see cref="ViewingDate"/> (and the active session when it matches). Job code is unchanged.
+    /// </summary>
+    public string? RenameTaskTypeOnViewingDay(string key, string newTaskName, string newCategory)
+    {
+        if (string.IsNullOrWhiteSpace(key)) return null;
+
+        var name = newTaskName.Trim();
+        if (name.Length == 0) return null;
+        var category = string.IsNullOrWhiteSpace(newCategory) ? "General" : newCategory.Trim();
+
+        var changed = false;
+        string? newKey = null;
+        foreach (var entry in _settings.Entries)
+        {
+            if (entry.IsDeleted) continue;
+            if (!TaskTypeSummary.IsOnDay(entry, ViewingDate)) continue;
+            if (TaskTypeSummary.KeyOf(entry) != key) continue;
+
+            entry.TaskName = name;
+            entry.Category = category;
+            newKey = TaskTypeSummary.KeyOf(entry);
+            changed = true;
+        }
+
+        if (ActiveSession is not null &&
+            TaskTypeSummary.KeyOf(
+                ActiveSession.TaskName,
+                ActiveSession.Category,
+                ActiveSession.JobCodeId,
+                ActiveSession.JobCodeText) == key)
+        {
+            ActiveSession = new ActiveSession
+            {
+                EntryId = ActiveSession.EntryId,
+                TaskName = name,
+                Category = category,
+                JobCodeId = ActiveSession.JobCodeId,
+                JobCodeText = ActiveSession.JobCodeText,
+                StartedUtc = ActiveSession.StartedUtc
+            };
+            StatusText = $"Tracking: {name}";
+            newKey ??= TaskTypeSummary.KeyOf(name, category, ActiveSession.JobCodeId, ActiveSession.JobCodeText);
+            changed = true;
+        }
+
+        if (!changed) return null;
+
+        RefreshToday();
+        Persist();
+        return newKey;
     }
 
     public void ReplaceJobCodes(IEnumerable<JobCode> codes)

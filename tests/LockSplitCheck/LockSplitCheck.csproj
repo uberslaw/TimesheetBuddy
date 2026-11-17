@@ -15,6 +15,7 @@
     <Compile Include="..\..\Models\AppSettings.cs" Link="AppSettings.cs" />
     <Compile Include="..\..\Services\WeekCalendar.cs" Link="WeekCalendar.cs" />
     <Compile Include="..\..\Services\DayTotals.cs" Link="DayTotals.cs" />
+    <Compile Include="..\..\Services\TaskTypeSummary.cs" Link="TaskTypeSummary.cs" />
     <Compile Include="..\..\Services\JobCodeViewList.cs" Link="JobCodeViewList.cs" />
     <Compile Include="..\..\Services\LockIntervalSplit.cs" Link="LockIntervalSplit.cs" />
     <Compile Include="..\..\Services\ScreenLockTracker.cs" Link="ScreenLockTracker.cs" />

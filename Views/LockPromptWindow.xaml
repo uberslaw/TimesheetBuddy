@@ -3,7 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Screen was locked"
         Icon="/Assets/TimesheetBuddy.ico"
-        Width="520"
+        Width="720"
+        MinHeight="360"
         SizeToContent="Height"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
@@ -11,19 +12,55 @@
         ShowInTaskbar="True"
         Background="{StaticResource BgBrush}">
     <DockPanel Margin="18">
-        <WrapPanel DockPanel.Dock="Bottom" HorizontalAlignment="Right" Margin="0,16,0,0">
-            <Button Style="{StaticResource PrimaryButton}" Content="Keep on this code"
-                    Margin="0,0,8,8" Click="Keep_Click"/>
-            <Button x:Name="AssignButton" Style="{StaticResource CompactButton}" Content="Assign to selected code"
-                    Margin="0,0,8,8" Click="Assign_Click"/>
-            <Button Style="{StaticResource CompactButton}" Content="Add to break"
-                    Margin="0,0,0,8" Click="Break_Click"/>
-        </WrapPanel>
+        <DockPanel DockPanel.Dock="Bottom" Margin="0,14,0,0">
+            <TextBlock x:Name="MinutesHint" VerticalAlignment="Center"
+                       Foreground="{StaticResource MutedBrush}" FontSize="11"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Style="{StaticResource CompactButton}" Content="Add row" Margin="0,0,8,0"
+                        Click="AddRow_Click"/>
+                <Button Style="{StaticResource PrimaryButton}" Content="OK" Width="100"
+                        IsDefault="True" Click="Ok_Click"/>
+            </StackPanel>
+        </DockPanel>
 
         <StackPanel>
-            <TextBlock x:Name="MessageText" FontSize="14" TextWrapping="Wrap"/>
-            <TextBlock Text="Another job code" Foreground="{StaticResource MutedBrush}" Margin="0,14,0,2"/>
-            <ComboBox x:Name="CodeCombo" DisplayMemberPath="Display"/>
+            <TextBlock x:Name="MessageText" FontSize="14" TextWrapping="Wrap" Margin="0,0,0,12"/>
+            <DataGrid x:Name="RowsGrid"
+                      AutoGenerateColumns="False"
+                      CanUserAddRows="False"
+                      HeadersVisibility="Column"
+                      GridLinesVisibility="Horizontal"
+                      BorderBrush="{StaticResource LineBrush}"
+                      MinHeight="140"
+                      MaxHeight="260"
+                      AlternatingRowBackground="#F8FAFC">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Task name"
+                                        Binding="{Binding TaskName, UpdateSourceTrigger=PropertyChanged}"
+                                        Width="*"/>
+                    <DataGridComboBoxColumn x:Name="CategoryCol" Header="Category"
+                                            Width="120"
+                                            SelectedItemBinding="{Binding Category, UpdateSourceTrigger=PropertyChanged}"/>
+                    <DataGridComboBoxColumn x:Name="CodeCol" Header="Job code"
+                                            Width="160"
+                                            DisplayMemberPath="Display"
+                                            SelectedValuePath="Id"
+                                            SelectedValueBinding="{Binding JobCodeId, UpdateSourceTrigger=PropertyChanged}"/>
+                    <DataGridComboBoxColumn x:Name="MinutesCol" Header="Minutes"
+                                            Width="80"
+                                            SelectedItemBinding="{Binding Minutes, UpdateSourceTrigger=PropertyChanged}"/>
+                    <DataGridTemplateColumn Header="" Width="44">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Content="✕" Style="{StaticResource GhostButton}"
+                                        Click="RemoveRow_Click" Tag="{Binding}"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+            <TextBlock Margin="0,8,0,0" Foreground="{StaticResource MutedBrush}" FontSize="11" TextWrapping="Wrap"
+                       Text="Leave the rows empty and click OK to keep the whole lock on the last active task."/>
         </StackPanel>
     </DockPanel>
 </Window>

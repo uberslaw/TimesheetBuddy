@@ -26,6 +26,8 @@ public partial class MainWindow : Window
     private DateTime _taskRowsDay = DateTime.Today;
     private bool _taskRebuildQueued;
     private bool _jobCodeLockedFromList;
+    private bool _fillingEditors;
+    private string? _editingRowKey;
     private bool _positionDirty;
     private bool _closing;
 
@@ -66,6 +68,10 @@ public partial class MainWindow : Window
         BindStatus();
         RebuildTaskRows();
         RefreshDayCodeTotals();
+
+        // Editable ComboBoxes surface TextBox.TextChanged for live rename while a row is selected.
+        TaskNameCombo.AddHandler(TextBoxBase.TextChangedEvent, new TextChangedEventHandler(EditorFields_Changed), true);
+        CategoryCombo.AddHandler(TextBoxBase.TextChangedEvent, new TextChangedEventHandler(EditorFields_Changed), true);
     }
 
     private void ApplyCompactSize()
@@ -352,6 +358,8 @@ public partial class MainWindow : Window
 
     private void FillEditorsFromRow(TaskTypeRowModel row)
     {
+        _fillingEditors = true;
+        _editingRowKey = row.Key;
         TaskNameCombo.Text = row.TaskName;
         CategoryCombo.Text = row.Category;
 
@@ -367,7 +375,59 @@ public partial class MainWindow : Window
             JobCodeCombo.Text = JobCode.FormatLabelFromStored(row.JobCodeText);
         }
 
+        _fillingEditors = false;
         LockJobCodeFromList(true);
+    }
+
+    private void EditorFields_Changed(object sender, EventArgs e) =>
+        TryLiveRenameFromEditors();
+
+    private void EditorFields_Changed(object sender, TextChangedEventArgs e) =>
+        TryLiveRenameFromEditors();
+
+    private void TryLiveRenameFromEditors()
+    {
+        if (_fillingEditors || !_jobCodeLockedFromList || _editingRowKey is null)
+            return;
+        if (_state.IsHistoryMode)
+            return;
+
+        // Update the list row as you type; do not rebuild (that would fight the caret).
+        ApplySelectedTaskRename(rebuild: false);
+    }
+
+    private bool ApplySelectedTaskRename(bool rebuild)
+    {
+        if (_editingRowKey is null || !_jobCodeLockedFromList)
+            return false;
+
+        var name = TaskNameCombo.Text?.Trim() ?? string.Empty;
+        if (name.Length == 0)
+            return false;
+
+        var category = CategoryCombo.Text?.Trim() ?? "General";
+        var oldKey = _editingRowKey;
+        var newKey = _state.RenameTaskTypeOnViewingDay(oldKey, name, category);
+        if (newKey is null)
+            return false;
+
+        if (_expandedKeys.Remove(oldKey))
+            _expandedKeys.Add(newKey);
+        _editingRowKey = newKey;
+        BindStatus();
+
+        // Merging into an existing type needs a full rebuild; otherwise patch the row in place.
+        var mergesIntoExisting = !string.Equals(oldKey, newKey, StringComparison.Ordinal) &&
+                                 _taskRows.Any(r => r.Key == newKey);
+        if (rebuild || mergesIntoExisting)
+        {
+            QueueTaskRebuild();
+            return true;
+        }
+
+        var row = _taskRows.FirstOrDefault(r => r.Key == oldKey);
+        row?.ApplyIdentity(newKey, name, category);
+        return true;
     }
 
     private void ContinueTaskType(TaskTypeRowModel row)
@@ -542,22 +602,35 @@ public partial class MainWindow : Window
         _state.StopActive(save: true);
         _scheduler.OnSessionChanged();
         BindStatus();
+        _editingRowKey = null;
         LockJobCodeFromList(false);
     }
 
     private void TaskNameCombo_KeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Enter)
+        if (e.Key != Key.Enter) return;
+        e.Handled = true;
+
+        if (_state.IsHistoryMode) return;
+
+        // Editing a list selection: Enter saves the rename, does not start a new task.
+        if (_jobCodeLockedFromList && _editingRowKey is not null)
         {
-            if (!_state.IsHistoryMode)
-                TryStartFromInputs();
-            e.Handled = true;
+            ApplySelectedTaskRename(rebuild: false);
+            return;
         }
+
+        TryStartFromInputs();
     }
 
     private void TryStartFromInputs()
     {
         if (_state.IsHistoryMode) return;
+
+        // Start while a list row is loaded means "new task", so clear the edit lock first
+        // after applying any pending rename.
+        if (_jobCodeLockedFromList && _editingRowKey is not null)
+            ApplySelectedTaskRename(rebuild: false);
 
         var task = TaskNameCombo.Text?.Trim() ?? string.Empty;
         var category = CategoryCombo.Text?.Trim() ?? "General";
@@ -602,7 +675,10 @@ public partial class MainWindow : Window
         BindStatus();
 
         // Ready for the next new task after Enter / Start.
+        _fillingEditors = true;
         TaskNameCombo.Text = string.Empty;
+        _fillingEditors = false;
+        _editingRowKey = null;
         LockJobCodeFromList(false);
     }
 
@@ -797,19 +873,19 @@ public partial class MainWindow : Window
         if (_closing || _state.IsHistoryMode)
             return;
 
-        var code = string.IsNullOrWhiteSpace(snapshot.JobCodeText)
-            ? snapshot.TaskName
-            : snapshot.JobCodeText;
-        var message = LockIntervalSplit.PromptMessage(LockIntervalSplit.ReportedMinutes(lockedFor), code);
-        var others = _state.JobCodes.Where(job => job.Id != snapshot.JobCodeId).ToList();
-
+        var message = LockIntervalSplit.PromptMessage(lockedFor, snapshot);
         EnsureVisibleForPrompt();
-        var dialog = new LockPromptWindow(message, others) { Owner = this };
+        var dialog = new LockPromptWindow(
+            message,
+            lockedFor,
+            _state.JobCodes.ToList(),
+            _state.Categories.ToList())
+        { Owner = this };
         if (dialog.ShowDialog() != true)
             return;
 
-        var applied = _state.ApplyScreenLockChoice(snapshot, unlockedAtUtc, dialog.Choice, dialog.SelectedCode);
-        if (!applied && dialog.Choice != LockIntervalSplit.Choice.KeepOnCurrent)
+        var applied = _state.ApplyScreenLockAssignments(snapshot, unlockedAtUtc, dialog.Assignments);
+        if (!applied && dialog.Assignments.Count > 0)
         {
             MessageBox.Show(this,
                 "Those minutes stayed on the task that was running. The timer had already stopped, so they were not moved.",
@@ -817,6 +893,9 @@ public partial class MainWindow : Window
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
         }
+
+        QueueTaskRebuild();
+        RefreshDayCodeTotals();
     }
 
     private void AddManual_Click(object sender, RoutedEventArgs e)
@@ -963,9 +1042,28 @@ public sealed class TaskSegmentRowModel
 
 public sealed class TaskTypeRowModel : INotifyPropertyChanged
 {
-    public required string Key { get; init; }
-    public required string TaskName { get; init; }
-    public required string Category { get; init; }
+    private string _key = string.Empty;
+    private string _taskName = string.Empty;
+    private string _category = string.Empty;
+
+    public required string Key
+    {
+        get => _key;
+        set => Set(ref _key, value);
+    }
+
+    public required string TaskName
+    {
+        get => _taskName;
+        set => Set(ref _taskName, value);
+    }
+
+    public required string Category
+    {
+        get => _category;
+        set => Set(ref _category, value);
+    }
+
     public required Guid? JobCodeId { get; init; }
     public required string JobCodeText { get; init; }
     public string JobCodeDisplay => JobCode.FormatLabelFromStored(JobCodeText);
@@ -979,6 +1077,14 @@ public sealed class TaskTypeRowModel : INotifyPropertyChanged
         JobCodeId = row.JobCodeId,
         JobCodeText = row.JobCodeText
     };
+
+    /// <summary>Updates identity fields after a live rename without rebuilding the list.</summary>
+    public void ApplyIdentity(string key, string taskName, string category)
+    {
+        Key = key;
+        TaskName = taskName;
+        Category = category;
+    }
 
     public void SyncSegments(IReadOnlyList<TaskSegment> segments)
     {

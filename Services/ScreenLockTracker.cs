@@ -4,7 +4,7 @@ namespace TimesheetBuddy.Services;
 
 /// <summary>
 /// Remembers a lock that began while a timer was running and decides whether unlock should prompt.
-/// No prompt when the timer was idle, the session changed, or the lock was under a minute.
+/// No prompt when the timer was idle, the session changed, or the lock was under 30 seconds.
 /// </summary>
 public sealed class ScreenLockTracker
 {

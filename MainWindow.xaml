@@ -142,7 +142,8 @@
 
                 <StackPanel Grid.Row="0" Grid.Column="2">
                     <TextBlock Text="Category" Foreground="{StaticResource MutedBrush}" FontSize="10" Margin="0,0,0,2"/>
-                    <ComboBox x:Name="CategoryCombo" IsEditable="True"/>
+                    <ComboBox x:Name="CategoryCombo" IsEditable="True"
+                              LostFocus="EditorFields_Changed"/>
                 </StackPanel>
 
                 <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,6,0,0">
@@ -154,7 +155,8 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <ComboBox x:Name="TaskNameCombo" IsEditable="True"
-                                  KeyDown="TaskNameCombo_KeyDown"/>
+                                  KeyDown="TaskNameCombo_KeyDown"
+                                  LostFocus="EditorFields_Changed"/>
                         <Button x:Name="StartButton" Grid.Column="1" Style="{StaticResource PrimaryButton}"
                                 Content="Start" Margin="6,0,0,0" Padding="12,4"
                                 Click="Start_Click"/>

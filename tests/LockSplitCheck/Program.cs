@@ -61,19 +61,24 @@ List<TimeEntry> WithManual(TimeEntry open)
 TimeSpan Day(IEnumerable<TimeEntry> entries) => DayTotals.ForDay(entries, now);
 TimeSpan Code(IEnumerable<TimeEntry> entries, Guid id) => DayTotals.ForJobCode(entries, id, now);
 
-// Prompt wording and the one-minute floor.
-Check(!LockIntervalSplit.MeetsMinimumLock(TimeSpan.FromSeconds(59)), "59 seconds does not prompt");
-Check(LockIntervalSplit.MeetsMinimumLock(TimeSpan.FromMinutes(1)), "exactly one minute prompts");
+// Prompt wording and the 30-second floor.
+Check(!LockIntervalSplit.MeetsMinimumLock(TimeSpan.FromSeconds(29)), "29 seconds does not prompt");
+Check(LockIntervalSplit.MeetsMinimumLock(TimeSpan.FromSeconds(30)), "exactly 30 seconds prompts");
 Check(LockIntervalSplit.ReportedMinutes(TimeSpan.FromMinutes(1)) == 1, "one minute is reported as 1");
 Check(LockIntervalSplit.ReportedMinutes(TimeSpan.FromSeconds(90)) == 2, "90 seconds reports as 2 minutes");
+Check(LockIntervalSplit.FormatLockClock(TimeSpan.FromSeconds(75)) == "00:01:15", "lock clock is HH:MM:SS");
+var promptSnap = new LockIntervalSplit.Snapshot
+{
+    EntryId = Guid.NewGuid(),
+    LockedAtUtc = lockedAt,
+    TaskName = "Ai Development",
+    Category = "Project",
+    JobCodeText = "04 — CS OFFICE SUPPORT"
+};
 Check(
-    LockIntervalSplit.PromptMessage(12, "DEV — Software development") ==
-    "The screen was locked for 12 minutes, assign those minutes to DEV — Software development, to another code, or add to \"break\" time?",
-    "prompt names the current code and the three choices");
-Check(
-    LockIntervalSplit.PromptMessage(1, "DEV") ==
-    "The screen was locked for 1 minute, assign those minutes to DEV, to another code, or add to \"break\" time?",
-    "a single minute stays singular");
+    LockIntervalSplit.PromptMessage(TimeSpan.FromSeconds(75), promptSnap) ==
+    "The screen was locked for 00:01:15, please enter tasks and time below or click OK to assign all time to the last active code: 04 — CS OFFICE SUPPORT, Project, Ai Development.",
+    "prompt names lock clock plus code, category, and task");
 
 // Keep leaves the running entry intact, lock minutes included.
 var keptEntry = OpenEntry();
@@ -165,15 +170,14 @@ var manualResult = LockIntervalSplit.Apply(
     unlockedAt, LockIntervalSplit.Choice.Break, null);
 Check(!manualResult.Applied && manualEntries.Count == 1, "manual minutes are not split by the clock");
 
-// Tracker: prompt only when the same timer was running and the lock lasted at least a minute.
+// Tracker: prompt only when the same timer was running and the lock lasted at least 30 seconds.
 var tracker = new ScreenLockTracker();
 var running = SessionFor(OpenEntry());
 tracker.NoteLock(null, lockedAt);
 Check(!tracker.TryTakeUnlock(running, unlockedAt, out _, out _), "a lock while idle does not prompt");
 
 tracker.NoteLock(running, lockedAt);
-Check(!tracker.TryTakeUnlock(running, lockedAt.AddSeconds(59), out _, out _), "tracker ignores a lock under one minute");
-
+Check(!tracker.TryTakeUnlock(running, lockedAt.AddSeconds(29), out _, out _), "tracker ignores a lock under 30 seconds");
 tracker.NoteLock(running, lockedAt);
 Check(!tracker.TryTakeUnlock(null, unlockedAt, out _, out _), "tracker ignores unlock after the timer stopped");
 
@@ -183,7 +187,7 @@ Check(!tracker.TryTakeUnlock(replaced, unlockedAt, out _, out _), "tracker ignor
 
 tracker.NoteLock(running, lockedAt);
 tracker.NoteLock(running, lockedAt.AddMinutes(5));
-Check(tracker.TryTakeUnlock(running, lockedAt.AddMinutes(2), out var snap, out var lockedFor), "a one-minute lock prompts");
+Check(tracker.TryTakeUnlock(running, lockedAt.AddMinutes(2), out var snap, out var lockedFor), "a 30s+ lock prompts");
 Check(snap!.LockedAtUtc == lockedAt && lockedFor == TimeSpan.FromMinutes(2), "the first lock time is kept");
 Check(!tracker.TryTakeUnlock(running, unlockedAt, out _, out _), "the pending lock is consumed once");
 
