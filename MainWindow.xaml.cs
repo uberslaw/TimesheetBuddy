@@ -65,6 +65,7 @@ public partial class MainWindow : Window
             _state.RestoreSessionIfAny();
         BindStatus();
         RebuildTaskRows();
+        RefreshDayCodeTotals();
     }
 
     private void ApplyCompactSize()
@@ -186,11 +187,25 @@ public partial class MainWindow : Window
         }
 
         if (_state.IsHistoryMode)
+        {
+            RefreshDayCodeTotals();
             return;
+        }
 
         _state.Tick();
         TimerText.Text = _state.ElapsedDisplay;
         RefreshTaskTotals();
+        RefreshDayCodeTotals();
+    }
+
+    private void RefreshDayCodeTotals()
+    {
+        var day = _state.ViewingDate;
+        var rows = DayTotals.ByJobCodeForDay(_state.Settings.Entries, day, DateTime.UtcNow);
+        DayCodeTotalsText.Text = DayTotals.FormatSummary(rows);
+        DayCodeTotalsText.ToolTip = _state.IsHistoryMode
+            ? $"Time accounted for {_state.ViewingDate:d MMM yyyy} by job code (most to least)"
+            : "Time accounted for today by job code (most to least)";
     }
 
     private void SavePlacement() =>
@@ -206,7 +221,10 @@ public partial class MainWindow : Window
             if (e.PropertyName is nameof(AppState.ActiveSession))
                 QueueTaskRebuild();
             if (e.PropertyName is nameof(AppState.IsHistoryMode) or nameof(AppState.ViewingDate))
+            {
                 ApplyModeUi();
+                RefreshDayCodeTotals();
+            }
         });
     }
 
@@ -243,6 +261,7 @@ public partial class MainWindow : Window
         var empty = _taskRows.Count == 0;
         TaskEmptyText.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
         TaskHeader.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
+        RefreshDayCodeTotals();
     }
 
     private void RefreshTaskTotals()
