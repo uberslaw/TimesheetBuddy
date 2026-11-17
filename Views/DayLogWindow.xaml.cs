@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using TimesheetBuddy.Models;
 
 namespace TimesheetBuddy.Views;
 
@@ -37,7 +38,7 @@ public partial class DayLogWindow : Window
             EndLocal = e.EndUtc is null ? "…" : e.EndUtc.Value.ToLocalTime().ToString("HH:mm"),
             Duration = FormatDuration(e.Duration),
             Task = e.TaskName,
-            Code = e.JobCodeText,
+            Code = JobCode.FormatLabelFromStored(e.JobCodeText),
             Category = e.Category,
             Notes = e.Notes,
             Source = e.Source

@@ -364,7 +364,7 @@ public partial class MainWindow : Window
         {
             // Keep a display value even if the code was removed from the catalog.
             JobCodeCombo.SelectedItem = null;
-            JobCodeCombo.Text = string.IsNullOrWhiteSpace(row.JobCodeText) ? string.Empty : row.JobCodeText;
+            JobCodeCombo.Text = JobCode.FormatLabelFromStored(row.JobCodeText);
         }
 
         LockJobCodeFromList(true);
@@ -968,7 +968,7 @@ public sealed class TaskTypeRowModel : INotifyPropertyChanged
     public required string Category { get; init; }
     public required Guid? JobCodeId { get; init; }
     public required string JobCodeText { get; init; }
-    public string JobCodeDisplay => string.IsNullOrWhiteSpace(JobCodeText) ? "—" : JobCodeText;
+    public string JobCodeDisplay => JobCode.FormatLabelFromStored(JobCodeText);
     public ObservableCollection<TaskSegmentRowModel> Children { get; } = [];
 
     public static TaskTypeRowModel From(TaskTypeRow row) => new()

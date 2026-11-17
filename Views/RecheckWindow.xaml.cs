@@ -1,4 +1,5 @@
 using System.Windows;
+using TimesheetBuddy.Models;
 
 namespace TimesheetBuddy.Views;
 
@@ -19,7 +20,7 @@ public partial class RecheckWindow : Window
         TaskLabel.Text = session?.TaskName ?? "Unknown task";
         CodeLabel.Text = string.IsNullOrWhiteSpace(session?.JobCodeText)
             ? "No job code"
-            : session!.JobCodeText;
+            : JobCode.FormatLabelFromStored(session!.JobCodeText);
         ElapsedLabel.Text = $"Elapsed {App.State.ElapsedDisplay}";
 
         // Modal until acknowledged — disable Alt+F4 close without choosing.
