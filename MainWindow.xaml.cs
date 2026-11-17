@@ -509,6 +509,53 @@ public partial class MainWindow : Window
         ContinueTaskType(row);
     }
 
+    private void AssignAndDeleteMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (!TryGetMenuRow(sender, out var row)) return;
+
+        var day = _state.ViewingDate;
+        var summary = TaskTypeSummary.Build(_state.Settings.Entries, day, DateTime.UtcNow);
+        var source = summary.FirstOrDefault(r => r.Key == row.Key);
+        if (source is null || source.Segments.Count == 0)
+        {
+            MessageBox.Show(this,
+                "That task no longer has time on this day.",
+                "Assign time and Delete",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        var dialog = new AssignAndDeleteWindow(
+            source,
+            summary,
+            _state.JobCodes.ToList(),
+            _state.Categories.ToList())
+        { Owner = this };
+
+        if (dialog.ShowDialog() != true)
+            return;
+
+        var error = _state.AssignTaskTypeSegmentsAndDelete(source.Key, dialog.Assignments);
+        if (error is not null)
+        {
+            MessageBox.Show(this, error, "Assign time and Delete",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        _expandedKeys.Remove(source.Key);
+        if (_editingRowKey == source.Key)
+        {
+            _editingRowKey = null;
+            LockJobCodeFromList(false);
+        }
+
+        QueueTaskRebuild();
+        BindStatus();
+        StatusText.Text = $"Assigned time from {source.TaskName} and removed that row";
+    }
+
     private void DeleteTaskMenu_Click(object sender, RoutedEventArgs e)
     {
         if (!TryGetMenuRow(sender, out var row)) return;

@@ -10,9 +10,13 @@
 
   <ItemGroup>
     <Compile Include="..\..\Models\TimeEntry.cs" Link="TimeEntry.cs" />
+    <Compile Include="..\..\Models\AppSettings.cs" Link="AppSettings.cs" />
+    <Compile Include="..\..\Models\JobCode.cs" Link="JobCode.cs" />
+    <Compile Include="..\..\Models\FavoriteTask.cs" Link="FavoriteTask.cs" />
     <Compile Include="..\..\Services\WeekCalendar.cs" Link="WeekCalendar.cs" />
     <Compile Include="..\..\Services\DayTotals.cs" Link="DayTotals.cs" />
     <Compile Include="..\..\Services\TaskTypeSummary.cs" Link="TaskTypeSummary.cs" />
+    <Compile Include="..\..\Services\TaskTypeReassign.cs" Link="TaskTypeReassign.cs" />
   </ItemGroup>
 
 </Project>

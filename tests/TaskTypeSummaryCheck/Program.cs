@@ -130,6 +130,91 @@ Check(breaks.Single(r => r.TaskName == "Notes").Category == "General", "blank ca
 Check(TaskTypeSummary.KeyOf(" Write Report ", "DEVELOPMENT", dev, "x") == TaskTypeSummary.KeyOf(running),
     "active-session key matches its entry regardless of case and spacing");
 
+// Assign time and Delete: move each portion onto another task, keep clocks, drop the source row.
+var portionA = Entry("Old task", "Development", dev, "DEV", Local(2026, 11, 11, 9), Local(2026, 11, 11, 9, 30));
+var portionB = Entry("Old task", "Development", dev, "DEV", Local(2026, 11, 11, 11), Local(2026, 11, 11, 11, 15));
+var reassignEntries = new List<TimeEntry> { portionA, portionB };
+var sourceKey = TaskTypeSummary.KeyOf(portionA);
+var reassignResult = TaskTypeReassign.Apply(
+    reassignEntries,
+    active: null,
+    today,
+    sourceKey,
+    [
+        new TaskTypeReassign.Assignment
+        {
+            EntryId = portionA.Id,
+            TaskName = "Alpha",
+            Category = "Development",
+            JobCodeId = dev,
+            JobCodeText = "DEV"
+        },
+        new TaskTypeReassign.Assignment
+        {
+            EntryId = portionB.Id,
+            TaskName = "Beta",
+            Category = "Meetings",
+            JobCodeId = mtg,
+            JobCodeText = "MTG"
+        }
+    ]);
+Check(reassignResult.Applied && reassignResult.Error is null, "assign-and-delete applies when every portion has a new task");
+Check(portionA.TaskName == "Alpha" && portionA.StartUtc == Local(2026, 11, 11, 9) && portionA.EndUtc == Local(2026, 11, 11, 9, 30),
+    "first portion keeps its clock and lands on Alpha");
+Check(portionB.TaskName == "Beta" && portionB.Category == "Meetings" && portionB.JobCodeId == mtg,
+    "second portion can go to a different task");
+var after = TaskTypeSummary.Build(reassignEntries, today, clock);
+Check(after.All(r => r.Key != sourceKey), "source task row is gone after assign-and-delete");
+Check(after.Count == 2, "each destination becomes its own row");
+
+var sameTarget = TaskTypeReassign.Apply(
+    [Entry("Stay", "Development", dev, "DEV", Local(2026, 11, 11, 9), Local(2026, 11, 11, 9, 10))],
+    null,
+    today,
+    TaskTypeSummary.KeyOf("Stay", "Development", dev, "DEV"),
+    [
+        new TaskTypeReassign.Assignment
+        {
+            EntryId = Guid.NewGuid(),
+            TaskName = "Stay",
+            Category = "Development",
+            JobCodeId = dev,
+            JobCodeText = "DEV"
+        }
+    ]);
+Check(!sameTarget.Applied, "assign-and-delete rejects a missing portion id");
+
+var open = Entry("Running", "Development", dev, "DEV", Local(2026, 11, 11, 14), null);
+var openSession = new ActiveSession
+{
+    EntryId = open.Id,
+    TaskName = open.TaskName,
+    Category = open.Category,
+    JobCodeId = open.JobCodeId,
+    JobCodeText = open.JobCodeText,
+    StartedUtc = open.StartUtc
+};
+var openList = new List<TimeEntry> { open };
+var moveRunning = TaskTypeReassign.Apply(
+    openList,
+    openSession,
+    today,
+    TaskTypeSummary.KeyOf(open),
+    [
+        new TaskTypeReassign.Assignment
+        {
+            EntryId = open.Id,
+            TaskName = "Moved",
+            Category = "Development",
+            JobCodeId = mtg,
+            JobCodeText = "MTG"
+        }
+    ]);
+Check(moveRunning.Applied && moveRunning.ActiveMutated, "running portion retargets the live session");
+Check(moveRunning.ActiveSession!.TaskName == "Moved" && moveRunning.ActiveSession.JobCodeId == mtg &&
+      moveRunning.ActiveSession.EntryId == open.Id && open.EndUtc is null,
+    "timer keeps running under the destination task");
+
 Console.WriteLine();
 if (failures.Count == 0)
 {

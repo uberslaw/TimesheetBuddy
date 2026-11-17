@@ -220,6 +220,9 @@
                                                               Click="StartTaskMenu_Click"
                                                               CommandParameter="{Binding}"/>
                                                     <Separator/>
+                                                    <MenuItem Header="Assign time and Delete…"
+                                                              Click="AssignAndDeleteMenu_Click"
+                                                              CommandParameter="{Binding}"/>
                                                     <MenuItem Header="Delete task" Click="DeleteTaskMenu_Click"
                                                               CommandParameter="{Binding}"/>
                                                 </ContextMenu>

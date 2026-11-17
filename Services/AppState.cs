@@ -403,6 +403,39 @@ public sealed class AppState : INotifyPropertyChanged
         Persist();
     }
 
+    /// <summary>
+    /// Moves every portion of <paramref name="sourceKey"/> on <see cref="ViewingDate"/> onto
+    /// other tasks (preserving clocks), then removes the source row. A running timer on a
+    /// reassigned portion keeps running under the destination task.
+    /// </summary>
+    public string? AssignTaskTypeSegmentsAndDelete(
+        string sourceKey,
+        IReadOnlyList<TaskTypeReassign.Assignment> assignments)
+    {
+        var result = TaskTypeReassign.Apply(
+            _settings.Entries,
+            ActiveSession,
+            ViewingDate,
+            sourceKey,
+            assignments);
+
+        if (!result.Applied)
+            return result.Error ?? "Could not assign those portions.";
+
+        if (result.ActiveMutated)
+        {
+            ActiveSession = result.ActiveSession;
+            Tick();
+            StatusText = ActiveSession is null
+                ? (IsHistoryMode ? ViewingDateLabel : "Idle — pick a job code or task to start")
+                : $"Tracking: {ActiveTaskLabel}";
+        }
+
+        RefreshToday();
+        Persist();
+        return null;
+    }
+
     public IReadOnlyList<DeletedTaskGroup> GetDeletedTaskGroupsToday()
     {
         PurgeExpiredDeletedEntries(persist: true);

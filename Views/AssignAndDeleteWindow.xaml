@@ -1,0 +1,71 @@
+<Window x:Class="TimesheetBuddy.Views.AssignAndDeleteWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Assign time and Delete"
+        Icon="/Assets/TimesheetBuddy.ico"
+        Width="860"
+        MinHeight="380"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Background="{StaticResource BgBrush}">
+    <DockPanel Margin="16">
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+            <Button Style="{StaticResource CompactButton}" Content="Cancel" Width="90" Margin="0,0,8,0"
+                    IsCancel="True" Click="Cancel_Click"/>
+            <Button Style="{StaticResource PrimaryButton}" Content="Assign &amp; delete" Width="130"
+                    IsDefault="True" Click="Confirm_Click"/>
+        </StackPanel>
+
+        <StackPanel>
+            <TextBlock x:Name="IntroText" FontSize="14" TextWrapping="Wrap" Margin="0,0,0,10"/>
+            <TextBlock Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,0,0,12"
+                       Text="Each row is one portion of time. Keep the when/duration, and send it to another task. The original task row is removed after every portion is assigned."/>
+
+            <Border Background="{StaticResource AccentSoftBrush}" CornerRadius="6" Padding="10" Margin="0,0,0,12">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Style="{StaticResource CompactButton}"
+                            Content="Apply to all portions" Margin="8,0,0,0"
+                            Click="ApplyToAll_Click"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Fill all from:" VerticalAlignment="Center" Margin="0,0,8,0"
+                                   FontWeight="SemiBold"/>
+                        <ComboBox x:Name="BulkTargetCombo" Width="420"
+                                  DisplayMemberPath="Display"/>
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+
+            <DataGrid x:Name="RowsGrid"
+                      AutoGenerateColumns="False"
+                      CanUserAddRows="False"
+                      HeadersVisibility="Column"
+                      GridLinesVisibility="Horizontal"
+                      BorderBrush="{StaticResource LineBrush}"
+                      MinHeight="160"
+                      MaxHeight="320"
+                      AlternatingRowBackground="#F8FAFC">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="When" Binding="{Binding WhenDisplay}" Width="110" IsReadOnly="True"/>
+                    <DataGridTextColumn Header="Duration" Binding="{Binding DurationDisplay}" Width="80" IsReadOnly="True"/>
+                    <DataGridComboBoxColumn x:Name="ExistingCol" Header="Existing task"
+                                            Width="180"
+                                            DisplayMemberPath="Display"
+                                            SelectedItemBinding="{Binding ExistingTarget, UpdateSourceTrigger=PropertyChanged}"/>
+                    <DataGridTextColumn Header="Task name"
+                                        Binding="{Binding TaskName, UpdateSourceTrigger=PropertyChanged}"
+                                        Width="*"/>
+                    <DataGridComboBoxColumn x:Name="CategoryCol" Header="Category"
+                                            Width="110"
+                                            SelectedItemBinding="{Binding Category, UpdateSourceTrigger=PropertyChanged}"/>
+                    <DataGridComboBoxColumn x:Name="CodeCol" Header="Job code"
+                                            Width="160"
+                                            DisplayMemberPath="Display"
+                                            SelectedValuePath="Id"
+                                            SelectedValueBinding="{Binding JobCodeId, UpdateSourceTrigger=PropertyChanged}"/>
+                </DataGrid.Columns>
+            </DataGrid>
+        </StackPanel>
+    </DockPanel>
+</Window>
