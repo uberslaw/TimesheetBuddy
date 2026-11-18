@@ -46,7 +46,7 @@ TimesheetBuddy/
 │   ├── QuickAddJobCodeWindow.*     # Menu → Add job code (code + description)
 │   ├── JobCodeViewWindow.*         # Alternate row-per-code timer view
 │   ├── AddJobCodeWindow.*          # Job-code view: add existing or create one
-│   └── LockPromptWindow.*          # Assign locked minutes, or count them as break
+│   └── LockPromptWindow.*          # Assign lock time to last active task or another code
 ├── README.md
 └── handover.md                     # This file
 ```
@@ -107,7 +107,7 @@ Closing the app while a timer is running saves that task onto the current day's 
 
 **History mode.** Menu → Load timesheet… opens a calendar (no future dates). Entering another day stops any active timer, sets `AppState.ViewingDate` / `IsHistoryMode`, shows a yellow banner (“Editing {date} — timer inactive” + Back to today), and disables Start/Stop/job-code auto-start. Row clicks open Add time instead of starting a timer. Manual and Add time entries land on `ViewingDate` (end at that day's clock time-of-day equivalent). `PromptScheduler` does not fire recheck/fifteen while `IsHistoryMode`. Menu → Back to today (or the banner button) calls `ExitHistoryMode()`.
 
-**Screen lock.** If Windows locks the session while a timer is running, unlock (after at least one minute) asks whether those minutes stay on the current code, move to another code, or count as break. Break is a finished entry named Break in category Break, not a new job code. Moving the interval leaves the time before the lock on the original code and continues that code from the unlock moment, so the locked minutes are not counted twice. A lock under one minute, or a lock while the timer is idle, does not prompt.
+**Screen lock.** If Windows locks the session while a timer is running, unlock (after at least 30 seconds) asks how to assign that time: Assign on the last-active row (job code, category, task name) keeps it there; Assign beside a job-code selector moves the lock interval onto that code. Moving the interval leaves the time before the lock on the original code and continues that code from the unlock moment, so the locked minutes are not counted twice. A lock under 30 seconds, or a lock while the timer is idle, does not prompt.
 
 ## Architecture notes
 

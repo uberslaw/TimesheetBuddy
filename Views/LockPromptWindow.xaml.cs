@@ -1,8 +1,4 @@
-using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Runtime.CompilerServices;
 using System.Windows;
-using System.Windows.Controls;
 using TimesheetBuddy.Models;
 using TimesheetBuddy.Services;
 
@@ -10,117 +6,58 @@ namespace TimesheetBuddy.Views;
 
 public partial class LockPromptWindow : Window
 {
-    private readonly ObservableCollection<LockRow> _rows = [];
-    private readonly TimeSpan _lockedFor;
-    private readonly List<int> _minuteChoices;
-
-    public LockPromptWindow(string message, TimeSpan lockedFor, IReadOnlyList<JobCode> codes, IReadOnlyList<string> categories)
+    public LockPromptWindow(
+        string message,
+        string activeLabel,
+        IReadOnlyList<JobCode> codes,
+        Guid? currentJobCodeId)
     {
         InitializeComponent();
         MessageText.Text = message;
-        _lockedFor = lockedFor < TimeSpan.Zero ? TimeSpan.Zero : lockedFor;
+        ActiveLabel.Text = activeLabel.EndsWith(':') ? activeLabel : activeLabel + ":";
 
-        var maxMinutes = Math.Max(1, (int)Math.Ceiling(_lockedFor.TotalMinutes));
-        _minuteChoices = Enumerable.Range(1, Math.Max(maxMinutes, 60)).ToList();
-        MinutesCol.ItemsSource = _minuteChoices;
-        CodeCol.ItemsSource = codes.Where(c => c.IsActive).ToList();
-        CategoryCol.ItemsSource = categories.ToList();
-
-        MinutesHint.Text = $"Locked for {LockIntervalSplit.FormatLockClock(_lockedFor)} — optional rows should not exceed that.";
-        _rows.Add(new LockRow { Minutes = Math.Min(5, maxMinutes), Category = categories.FirstOrDefault() ?? "General" });
-        RowsGrid.ItemsSource = _rows;
+        var active = codes.Where(c => c.IsActive).ToList();
+        CodeCombo.ItemsSource = active;
+        if (active.Count > 0)
+        {
+            CodeCombo.SelectedItem = active.FirstOrDefault(c => c.Id != currentJobCodeId) ?? active[0];
+        }
 
         Closing += OnClosingGuard;
     }
 
-    public IReadOnlyList<LockIntervalSplit.AssignmentSlice> Assignments { get; private set; } = [];
+    public LockIntervalSplit.Choice Choice { get; private set; } = LockIntervalSplit.Choice.KeepOnCurrent;
+    public JobCode? SelectedCode { get; private set; }
 
-    private void OnClosingGuard(object? sender, CancelEventArgs e)
+    private void OnClosingGuard(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         if (DialogResult is null)
             e.Cancel = true;
     }
 
-    private void AddRow_Click(object sender, RoutedEventArgs e) =>
-        _rows.Add(new LockRow
-        {
-            Minutes = 5,
-            Category = App.State.Categories.FirstOrDefault() ?? "General"
-        });
-
-    private void RemoveRow_Click(object sender, RoutedEventArgs e)
+    private void AssignActive_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is Button { Tag: LockRow row } && _rows.Count > 0)
-            _rows.Remove(row);
-    }
-
-    private void Ok_Click(object sender, RoutedEventArgs e)
-    {
-        RowsGrid.CommitEdit();
-        RowsGrid.CommitEdit();
-
-        var slices = new List<LockIntervalSplit.AssignmentSlice>();
-        foreach (var row in _rows.Where(r => r.Minutes > 0 && !string.IsNullOrWhiteSpace(r.TaskName)))
-        {
-            var code = App.State.FindJobCode(row.JobCodeId);
-            slices.Add(new LockIntervalSplit.AssignmentSlice
-            {
-                TaskName = row.TaskName.Trim(),
-                Category = string.IsNullOrWhiteSpace(row.Category) ? "General" : row.Category.Trim(),
-                JobCodeId = row.JobCodeId,
-                JobCodeText = code?.Display ?? string.Empty,
-                Duration = TimeSpan.FromMinutes(row.Minutes)
-            });
-        }
-
-        var used = slices.Aggregate(TimeSpan.Zero, (a, s) => a + s.Duration);
-        if (used > _lockedFor + TimeSpan.FromSeconds(30))
-        {
-            MessageBox.Show(this,
-                $"Those rows add up to more than the lock ({LockIntervalSplit.FormatLockClock(_lockedFor)}).",
-                "Timesheet Buddy", MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-
-        Assignments = slices;
+        Choice = LockIntervalSplit.Choice.KeepOnCurrent;
+        SelectedCode = null;
         DialogResult = true;
         Close();
     }
 
-    private sealed class LockRow : INotifyPropertyChanged
+    private void AssignSelected_Click(object sender, RoutedEventArgs e)
     {
-        private string _taskName = string.Empty;
-        private string _category = "General";
-        private Guid? _jobCodeId;
-        private int _minutes = 5;
-
-        public event PropertyChangedEventHandler? PropertyChanged;
-
-        public string TaskName
+        if (CodeCombo.SelectedItem is not JobCode code)
         {
-            get => _taskName;
-            set { _taskName = value; OnPropertyChanged(); }
+            MessageBox.Show(this,
+                "Pick a job code, then click Assign.",
+                "Timesheet Buddy",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
         }
 
-        public string Category
-        {
-            get => _category;
-            set { _category = value; OnPropertyChanged(); }
-        }
-
-        public Guid? JobCodeId
-        {
-            get => _jobCodeId;
-            set { _jobCodeId = value; OnPropertyChanged(); }
-        }
-
-        public int Minutes
-        {
-            get => _minutes;
-            set { _minutes = value; OnPropertyChanged(); }
-        }
-
-        private void OnPropertyChanged([CallerMemberName] string? name = null) =>
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        Choice = LockIntervalSplit.Choice.AssignToJobCode;
+        SelectedCode = code;
+        DialogResult = true;
+        Close();
     }
 }

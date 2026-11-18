@@ -920,19 +920,22 @@ public partial class MainWindow : Window
         if (_closing || _state.IsHistoryMode)
             return;
 
-        var message = LockIntervalSplit.PromptMessage(lockedFor, snapshot);
         EnsureVisibleForPrompt();
         var dialog = new LockPromptWindow(
-            message,
-            lockedFor,
+            LockIntervalSplit.PromptMessage(lockedFor),
+            LockIntervalSplit.FormatActiveLabel(snapshot),
             _state.JobCodes.ToList(),
-            _state.Categories.ToList())
+            snapshot.JobCodeId)
         { Owner = this };
         if (dialog.ShowDialog() != true)
             return;
 
-        var applied = _state.ApplyScreenLockAssignments(snapshot, unlockedAtUtc, dialog.Assignments);
-        if (!applied && dialog.Assignments.Count > 0)
+        var applied = _state.ApplyScreenLockChoice(
+            snapshot,
+            unlockedAtUtc,
+            dialog.Choice,
+            dialog.SelectedCode);
+        if (!applied && dialog.Choice != LockIntervalSplit.Choice.KeepOnCurrent)
         {
             MessageBox.Show(this,
                 "Those minutes stayed on the task that was running. The timer had already stopped, so they were not moved.",

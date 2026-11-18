@@ -67,6 +67,14 @@ Check(LockIntervalSplit.MeetsMinimumLock(TimeSpan.FromSeconds(30)), "exactly 30 
 Check(LockIntervalSplit.ReportedMinutes(TimeSpan.FromMinutes(1)) == 1, "one minute is reported as 1");
 Check(LockIntervalSplit.ReportedMinutes(TimeSpan.FromSeconds(90)) == 2, "90 seconds reports as 2 minutes");
 Check(LockIntervalSplit.FormatLockClock(TimeSpan.FromSeconds(75)) == "00:01:15", "lock clock is HH:MM:SS");
+Check(
+    LockIntervalSplit.PromptMessage(TimeSpan.FromSeconds(75)) ==
+    "The screen was locked for 1 minute, how would you like to assign the time?",
+    "prompt asks how to assign after naming the lock minutes");
+Check(
+    LockIntervalSplit.PromptMessage(TimeSpan.FromMinutes(12)) ==
+    "The screen was locked for 12 minutes, how would you like to assign the time?",
+    "prompt uses plural minutes");
 var promptSnap = new LockIntervalSplit.Snapshot
 {
     EntryId = Guid.NewGuid(),
@@ -76,9 +84,8 @@ var promptSnap = new LockIntervalSplit.Snapshot
     JobCodeText = "04 — CS OFFICE SUPPORT"
 };
 Check(
-    LockIntervalSplit.PromptMessage(TimeSpan.FromSeconds(75), promptSnap) ==
-    "The screen was locked for 00:01:15, please enter tasks and time below or click OK to assign all time to the last active code: 04 — CS OFFICE SUPPORT, Project, Ai Development.",
-    "prompt names lock clock plus code, category, and task");
+    LockIntervalSplit.FormatActiveLabel(promptSnap) == "04 — CS OFFICE SUPPORT, Project, Ai Development",
+    "active row shows code, category, and task name");
 
 // Keep leaves the running entry intact, lock minutes included.
 var keptEntry = OpenEntry();

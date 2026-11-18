@@ -61,16 +61,22 @@ public static class LockIntervalSplit
         return $"{(int)lockedFor.TotalHours:00}:{lockedFor.Minutes:00}:{lockedFor.Seconds:00}";
     }
 
-    public static string PromptMessage(TimeSpan lockedFor, Snapshot snapshot)
+    public static string PromptMessage(TimeSpan lockedFor)
     {
-        var clock = FormatLockClock(lockedFor);
+        var minutes = ReportedMinutes(lockedFor);
+        var span = minutes == 1 ? "1 minute" : $"{minutes} minutes";
+        return $"The screen was locked for {span}, how would you like to assign the time?";
+    }
+
+    /// <summary>Last-active row label: job code, category, task name.</summary>
+    public static string FormatActiveLabel(Snapshot snapshot)
+    {
         var code = JobCode.FormatLabelFromStored(snapshot.JobCodeText);
         if (code == "—")
             code = "No job code";
         var category = string.IsNullOrWhiteSpace(snapshot.Category) ? "General" : snapshot.Category.Trim();
         var task = string.IsNullOrWhiteSpace(snapshot.TaskName) ? "Untitled task" : snapshot.TaskName.Trim();
-        return
-            $"The screen was locked for {clock}, please enter tasks and time below or click OK to assign all time to the last active code: {code}, {category}, {task}.";
+        return $"{code}, {category}, {task}";
     }
 
     /// <summary>Legacy wording helper kept for older call sites/tests.</summary>
