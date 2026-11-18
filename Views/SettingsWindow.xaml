@@ -80,7 +80,8 @@
 
             <TabItem Header="Prompts &amp; pin">
                 <StackPanel Margin="10">
-                    <CheckBox x:Name="AlwaysOnTopCheck" Content="Pin window always on top" Margin="0,0,0,12"/>
+                    <CheckBox x:Name="AlwaysOnTopCheck" Content="Pin window always on top" Margin="0,0,0,8"/>
+                    <CheckBox x:Name="TimerWidgetCheck" Content="Show a small timer widget while minimized" Margin="0,0,0,12"/>
 
                     <TextBlock FontWeight="SemiBold" Text="Still-working recheck" Margin="0,0,0,6"/>
                     <CheckBox x:Name="RecheckEnabledCheck" Content="Ask me if I'm still on the active task" Margin="0,0,0,8"/>

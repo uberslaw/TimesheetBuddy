@@ -32,6 +32,7 @@ TimesheetBuddy/
 │   ├── TaskTypeSummary.cs          # Today's entries grouped by task + category + job code
 │   ├── LockIntervalSplit.cs        # Split a lock interval off the running entry
 │   ├── ScreenLockTracker.cs        # Decide whether an unlock should prompt
+│   ├── TimerWidgetLayout.cs        # Widget text lines + on-screen position clamp
 │   └── ScreenLockWatcher.cs        # SessionLock / SessionUnlock → prompt
 ├── Views/
 │   ├── SettingsWindow.*            # Job codes, favorites, categories, prompts
@@ -46,7 +47,8 @@ TimesheetBuddy/
 │   ├── QuickAddJobCodeWindow.*     # Menu → Add job code (code + description)
 │   ├── JobCodeViewWindow.*         # Alternate row-per-code timer view
 │   ├── AddJobCodeWindow.*          # Job-code view: add existing or create one
-│   └── LockPromptWindow.*          # Assign lock time to last active task or another code
+│   ├── LockPromptWindow.*          # Assign lock time to last active task or another code
+│   └── TimerWidgetWindow.*         # Small always-on-top timer shown while minimized
 ├── README.md
 └── handover.md                     # This file
 ```
@@ -88,12 +90,13 @@ Requires [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) on Win
 | Manual time entry | `Views/ManualEntryWindow` (lands on `ViewingDate`) |
 | Job code view (switch from the Menu; Compact tracker returns) | `Views/JobCodeViewWindow` |
 | Screen-lock prompt while a timer is running | `ScreenLockWatcher` → `Views/LockPromptWindow` |
+| Minimized timer widget (code - category, task, HH:MM:SS; drag to move, click to restore; Settings → Prompts & pin to turn off) | `MainWindow.Window_StateChanged` → `Views/TimerWidgetWindow` + `Services/TimerWidgetLayout` |
 
 ## Data
 
 | File | Contents |
 |------|----------|
-| `%LocalAppData%\TimesheetBuddy\settings.json` | Job codes, favorites, categories, prompt prefs, window position, job-code view order (`jobCodeViewIds`), all time entries, active session |
+| `%LocalAppData%\TimesheetBuddy\settings.json` | Job codes, favorites, categories, prompt prefs, window position, timer widget toggle + position, job-code view order (`jobCodeViewIds`), all time entries, active session |
 | `%LocalAppData%\TimesheetBuddy\day-notes-yyyyMMdd.txt` | Per-day free-text notes from the day log |
 | `%LocalAppData%\TimesheetBuddy\crash.log` | Unhandled exceptions. Startup failures also show a dialog with this path |
 
@@ -106,6 +109,8 @@ Closing the app while a timer is running saves that task onto the current day's 
 **Today by task (main window).** Below the inputs, the compact tracker lists the viewing day's work with one row per task type: task name + category + job code. Name and category match case-insensitively; the code matches on `JobCodeId`, or on the code text when an entry has no id. Every non-deleted entry logged that day joins its row automatically (timer, manual, add-time, catch-up, lock-split slices, Break). Columns: expand arrow, task, category, job code, total (`hh:mm:ss`, including the live timer), and the number of segments. ▶/▼ expands indented child rows for each segment (local HH:mm + duration, chronological); parent rows on either side stay visible. Click a parent row to continue that task type (`AppState.StartOrSwitch`); the expand arrow does not start a timer. Right-click offers Add time… (finished manual segment, no live timer), Start timer / Continue, Assign time and Delete… (reassign each portion’s clocks to other tasks via `TaskTypeReassign` / `AssignAndDeleteWindow`, then remove the source row), and Delete task. Soft-delete sets `TimeEntry.IsDeleted` + `DeletedAtLocal` on all of that type's entries for the viewing day (and stops the timer if that type is active). Deleted entries are filtered out of TaskTypeSummary, EntriesForDay, UnaccountedTime, WeekCalendar, and DayTotals. Purge removes soft-deleted entries whose `DeletedAtLocal.Date` is before today on load/save. Menu → Restore deleted tasks… restores today's groups. Rows are ordered by most recent start and only re-sort when entries change, not on the one-second tick. Check: `dotnet run --project tests/TaskTypeSummaryCheck`.
 
 **History mode.** Menu → Load timesheet… opens a calendar (no future dates). Entering another day stops any active timer, sets `AppState.ViewingDate` / `IsHistoryMode`, shows a yellow banner (“Editing {date} — timer inactive” + Back to today), and disables Start/Stop/job-code auto-start. Row clicks open Add time instead of starting a timer. Manual and Add time entries land on `ViewingDate` (end at that day's clock time-of-day equivalent). `PromptScheduler` does not fire recheck/fifteen while `IsHistoryMode`. Menu → Back to today (or the banner button) calls `ExitHistoryMode()`.
+
+**Timer widget.** Minimizing the main window (its button, the taskbar, Win+M) shows a 240×84 always-on-top widget that never takes focus or a taskbar slot. Line 1 is `<JobCode.Code> - <category>` (stored label trimmed to its code part when the code is not in the catalog, `No job code - <category>` without one), line 2 the task name, line 3 the same `ElapsedDisplay` as the main counter in `ActiveTimerBrush`. Idle shows `Idle` / `No active task` / `00:00:00`. It refreshes from `AppState.PropertyChanged`, driven by the main window's one-second tick. Drag moves it (saved as `widgetLeft` / `widgetTop`, finite values only); on each show the position is pulled back onto the work area, or reset to bottom-right if its monitor is gone. A click or double-click restores the main window, which hides the widget; prompts do the same via `EnsureVisibleForPrompt`. Closing the main window closes it. `showTimerWidget: false` turns it off. Check: `dotnet run --project tests/TimerWidgetCheck`.
 
 **Screen lock.** If Windows locks the session while a timer is running, unlock (after at least 30 seconds) asks how to assign that time: Assign on the last-active row (job code, category, task name) keeps it there; Assign beside a job-code selector moves the lock interval onto that code. Moving the interval leaves the time before the lock on the original code and continues that code from the unlock moment, so the locked minutes are not counted twice. A lock under 30 seconds, or a lock while the timer is idle, does not prompt.
 
@@ -141,6 +146,7 @@ Other reasonable next steps if needed:
 7. Day log shows entries; day notes persist after blur/refocus.
 8. Close while a timer is running → the task is saved on today's list as a finished entry and does not resume after restart.
 9. Run a task, Stop, run another, then click the first task's row under "Today by task" → it turns green, its total keeps counting, and its segment count goes from 1 to 2. Clicking it again does nothing. Drag the bottom edge to resize; the height comes back after restart.
+10. Start a task and minimize (button, taskbar, Win+M) → the widget appears bottom-right with `code - category`, the task name and a ticking orange counter matching the main one; it does not take focus. Drag it elsewhere, restore, minimize again → same spot. Click it → the main window comes back and the widget hides. Stop the timer and minimize → `Idle` / `No active task` / `00:00:00`. With the widget showing, let a recheck or catch-up prompt fire → main window restores, widget hides, the dialog is on top. Close the app from the taskbar while minimized → the process exits.
 
 ## Contact / ownership
 

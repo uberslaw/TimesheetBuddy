@@ -26,6 +26,7 @@ public partial class SettingsWindow : Window
         CategoriesBox.Text = string.Join(Environment.NewLine, state.Categories);
 
         AlwaysOnTopCheck.IsChecked = state.Settings.AlwaysOnTop;
+        TimerWidgetCheck.IsChecked = state.Settings.ShowTimerWidget;
         RecheckEnabledCheck.IsChecked = state.Settings.RecheckPromptEnabled;
         FifteenEnabledCheck.IsChecked = state.Settings.FifteenMinutePromptEnabled;
 
@@ -107,6 +108,7 @@ public partial class SettingsWindow : Window
             RecheckMinutes.SelectedItem as int? ?? 30,
             FifteenEnabledCheck.IsChecked == true,
             FifteenMinutes.SelectedItem as int? ?? 15);
+        App.State.SetShowTimerWidget(TimerWidgetCheck.IsChecked == true);
 
         DialogResult = true;
         Close();

@@ -11,6 +11,9 @@ public sealed class AppSettings
     public double? WindowLeft { get; set; }
     public double? WindowTop { get; set; }
     public double? WindowHeight { get; set; }
+    public bool ShowTimerWidget { get; set; } = true;
+    public double? WidgetLeft { get; set; }
+    public double? WidgetTop { get; set; }
     public List<JobCode> JobCodes { get; set; } = [];
     public List<FavoriteTask> FavoriteTasks { get; set; } = [];
     public List<string> Categories { get; set; } =

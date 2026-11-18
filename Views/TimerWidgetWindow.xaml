@@ -1,0 +1,48 @@
+<Window x:Class="TimesheetBuddy.Views.TimerWidgetWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Timesheet Buddy timer"
+        Icon="/Assets/TimesheetBuddy.ico"
+        Width="240" Height="84"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Topmost="True"
+        WindowStartupLocation="Manual"
+        Cursor="Hand"
+        ToolTip="Drag to move. Click to open Timesheet Buddy."
+        MouseLeftButtonDown="Widget_MouseLeftButtonDown">
+    <Border Background="{StaticResource AccentSoftBrush}"
+            BorderBrush="{StaticResource LineBrush}"
+            BorderThickness="1"
+            CornerRadius="8"
+            Padding="10,5">
+        <StackPanel VerticalAlignment="Center">
+            <TextBlock x:Name="HeaderText"
+                       FontSize="11"
+                       Foreground="{StaticResource MutedBrush}"
+                       HorizontalAlignment="Center"
+                       TextAlignment="Center"
+                       TextTrimming="CharacterEllipsis"
+                       Text="Idle"/>
+            <TextBlock x:Name="TaskText"
+                       FontSize="13"
+                       FontWeight="SemiBold"
+                       Foreground="{StaticResource InkBrush}"
+                       HorizontalAlignment="Center"
+                       TextAlignment="Center"
+                       TextTrimming="CharacterEllipsis"
+                       Text="No active task"/>
+            <TextBlock x:Name="ElapsedText"
+                       FontFamily="Consolas, Cascadia Mono, Courier New"
+                       FontSize="20"
+                       FontWeight="Bold"
+                       Foreground="{StaticResource ActiveTimerBrush}"
+                       HorizontalAlignment="Center"
+                       Text="00:00:00"/>
+        </StackPanel>
+    </Border>
+</Window>

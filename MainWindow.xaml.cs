@@ -23,6 +23,7 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<DayCodeTotalRowModel> _dayCodeRows = [];
     private readonly HashSet<string> _expandedKeys = new(StringComparer.Ordinal);
     private JobCodeViewWindow? _jobCodeView;
+    private TimerWidgetWindow? _widget;
     private TaskTypeRowModel? _pressedRow;
     private DateTime _taskRowsDay = DateTime.Today;
     private bool _taskRebuildQueued;
@@ -1096,12 +1097,55 @@ public partial class MainWindow : Window
     {
         if (WindowState == WindowState.Minimized)
             WindowState = WindowState.Normal;
+        HideTimerWidget();
         Activate();
         // Force above other windows while a prompt is shown.
         Topmost = true;
     }
 
     private void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+
+    // Covers the minimize button, taskbar clicks and Win+M, which all change WindowState.
+    private void Window_StateChanged(object? sender, EventArgs e)
+    {
+        if (WindowState == WindowState.Minimized)
+            ShowTimerWidget();
+        else
+            HideTimerWidget();
+    }
+
+    private void Window_Activated(object? sender, EventArgs e)
+    {
+        if (WindowState != WindowState.Minimized)
+            HideTimerWidget();
+    }
+
+    private void ShowTimerWidget()
+    {
+        if (_closing || !_state.Settings.ShowTimerWidget)
+            return;
+
+        if (_widget is null)
+        {
+            _widget = new TimerWidgetWindow();
+            _widget.RestoreRequested += (_, _) => RestoreFromWidget();
+            _widget.Closed += (_, _) => _widget = null;
+        }
+
+        _widget.ShowWidget();
+    }
+
+    private void HideTimerWidget() => _widget?.HideWidget();
+
+    private void RestoreFromWidget()
+    {
+        if (_closing)
+            return;
+        if (WindowState == WindowState.Minimized)
+            WindowState = WindowState.Normal;
+        HideTimerWidget();
+        Activate();
+    }
 
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
 
@@ -1123,6 +1167,10 @@ public partial class MainWindow : Window
     {
         _closing = true;
         _lockWatcher.Dispose();
+
+        // A hidden widget still counts as an open window and would keep the app alive.
+        _widget?.Close();
+        _widget = null;
 
         // A normal close finishes a running timer onto today's list.
         // The open entry gets EndUtc and ActiveSession is cleared, so it

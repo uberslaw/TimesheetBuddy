@@ -781,6 +781,24 @@ public sealed class AppState : INotifyPropertyChanged
         Persist();
     }
 
+    public void SaveWidgetPosition(double left, double top)
+    {
+        if (!double.IsFinite(left) || !double.IsFinite(top))
+            return;
+
+        _settings.WidgetLeft = left;
+        _settings.WidgetTop = top;
+        Persist();
+    }
+
+    public void SetShowTimerWidget(bool show)
+    {
+        if (_settings.ShowTimerWidget == show)
+            return;
+        _settings.ShowTimerWidget = show;
+        Persist();
+    }
+
     public IEnumerable<TimeEntry> EntriesForDay(DateTime dayLocal) =>
         _settings.Entries
             .Where(e =>

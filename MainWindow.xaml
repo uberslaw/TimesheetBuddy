@@ -11,6 +11,8 @@
         Topmost="True"
         Loaded="Window_Loaded"
         Closing="Window_Closing"
+        StateChanged="Window_StateChanged"
+        Activated="Window_Activated"
         LocationChanged="Window_LocationChanged"
         SizeChanged="Window_SizeChanged"
         MouseLeftButtonDown="Window_MouseLeftButtonDown">
