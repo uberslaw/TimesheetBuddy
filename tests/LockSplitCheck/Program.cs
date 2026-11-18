@@ -220,6 +220,16 @@ Check(DayTotals.ForJobCode([live], dev.Id, live.StartUtc) == TimeSpan.Zero, "a t
 Check(DayTotals.ForJobCode([live], dev.Id, live.StartUtc.AddSeconds(90)) == TimeSpan.FromSeconds(90), "the row total includes the live timer");
 Check(DayTotals.ForDay([live, loose], now) == TimeSpan.FromMinutes(10) + TimeSpan.FromMinutes(15), "today's total includes entries with no job code");
 Check(DayTotals.FormatClock(TimeSpan.FromSeconds(90)) == "00:01:30", "totals show a ticking clock");
+Check(DayTotals.FormatClockHm(TimeSpan.FromHours(7.5)) == "07:30", "remaining clock is HH:MM");
+Check(DayTotals.TimeRemaining(TimeSpan.FromHours(2)) == TimeSpan.FromHours(5.5), "remaining is 7.5h minus logged");
+Check(DayTotals.TimeRemaining(TimeSpan.FromHours(8)) == TimeSpan.Zero, "remaining floors at zero when over 7.5h");
+var summary = DayTotals.FormatSummary(
+[
+    new JobCodeDayTotal("Personal", TimeSpan.FromMinutes(15)),
+    new JobCodeDayTotal("04 — CS OFFICE SUPPORT", TimeSpan.FromHours(1))
+]);
+Check(summary.Contains("Time Remaining", StringComparison.Ordinal), "summary includes time remaining");
+Check(summary.Contains("Total", StringComparison.Ordinal), "summary includes total");
 
 // First open lists active codes. A saved id list is the customized order and does not invent rows.
 var inactive = new JobCode { Code = "OLD", Description = "Retired", IsActive = false };

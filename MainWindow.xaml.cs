@@ -20,6 +20,7 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _uiTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly ScreenLockWatcher _lockWatcher;
     private readonly ObservableCollection<TaskTypeRowModel> _taskRows = [];
+    private readonly ObservableCollection<DayCodeTotalRowModel> _dayCodeRows = [];
     private readonly HashSet<string> _expandedKeys = new(StringComparer.Ordinal);
     private JobCodeViewWindow? _jobCodeView;
     private TaskTypeRowModel? _pressedRow;
@@ -35,6 +36,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         TaskRowsList.ItemsSource = _taskRows;
+        DayCodeTotalsList.ItemsSource = _dayCodeRows;
         _lockWatcher = new ScreenLockWatcher(_state);
         _lockWatcher.UnlockPrompt += OnScreenUnlocked;
         _uiTimer.Tick += (_, _) => RefreshTimer();
@@ -208,10 +210,20 @@ public partial class MainWindow : Window
     {
         var day = _state.ViewingDate;
         var rows = DayTotals.ByJobCodeForDay(_state.Settings.Entries, day, DateTime.UtcNow);
-        DayCodeTotalsText.Text = DayTotals.FormatSummary(rows);
-        DayCodeTotalsText.ToolTip = _state.IsHistoryMode
-            ? $"Time accounted for {_state.ViewingDate:d MMM yyyy} by job code (most to least)"
-            : "Time accounted for today by job code (most to least)";
+        _dayCodeRows.Clear();
+        var grand = TimeSpan.Zero;
+        foreach (var row in rows)
+        {
+            grand += row.Total;
+            _dayCodeRows.Add(new DayCodeTotalRowModel(row.Label, DayTotals.FormatClock(row.Total)));
+        }
+
+        DayCodeEmptyText.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        DayGrandTotalText.Text = DayTotals.FormatClock(grand);
+        DayRemainingText.Text = DayTotals.FormatClockHm(DayTotals.TimeRemaining(grand));
+        DayTotalsPanel.ToolTip = _state.IsHistoryMode
+            ? $"Time accounted for {_state.ViewingDate:d MMM yyyy} by job code (most to least). Remaining is 7.5h minus logged."
+            : "Time accounted for today by job code (most to least). Remaining is 7.5h minus logged.";
     }
 
     private void SavePlacement() =>
@@ -507,6 +519,50 @@ public partial class MainWindow : Window
         if (_state.IsHistoryMode) return;
         if (!TryGetMenuRow(sender, out var row) || row.IsActive) return;
         ContinueTaskType(row);
+    }
+
+    private void ChangeJobCodeMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (!TryGetMenuRow(sender, out var row)) return;
+
+        var dialog = new ChangeJobCodeWindow(
+            row.TaskName,
+            _state.JobCodes.ToList(),
+            row.JobCodeId)
+        { Owner = this };
+
+        if (dialog.ShowDialog() != true || dialog.SelectedCode is null)
+            return;
+
+        if (row.JobCodeId == dialog.SelectedCode.Id)
+            return;
+
+        var oldKey = row.Key;
+        var newKey = _state.ChangeTaskTypeJobCodeOnViewingDay(oldKey, dialog.SelectedCode);
+        if (newKey is null)
+        {
+            MessageBox.Show(this,
+                "Could not change that job code.",
+                "Change job code",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        if (_expandedKeys.Remove(oldKey))
+            _expandedKeys.Add(newKey);
+        if (_editingRowKey == oldKey)
+        {
+            _editingRowKey = newKey;
+            _fillingEditors = true;
+            JobCodeCombo.SelectedItem = _state.JobCodes.FirstOrDefault(j => j.Id == dialog.SelectedCode.Id);
+            _fillingEditors = false;
+            LockJobCodeFromList(true);
+        }
+
+        QueueTaskRebuild();
+        BindStatus();
+        StatusText.Text = $"Moved {row.TaskName} to {dialog.SelectedCode.Display}";
     }
 
     private void AssignAndDeleteMenu_Click(object sender, RoutedEventArgs e)
@@ -1080,6 +1136,12 @@ public partial class MainWindow : Window
         SavePlacement();
         _state.Persist();
     }
+}
+
+public sealed class DayCodeTotalRowModel(string label, string timeText)
+{
+    public string Label { get; } = label;
+    public string TimeText { get; } = timeText;
 }
 
 public sealed class TaskSegmentRowModel

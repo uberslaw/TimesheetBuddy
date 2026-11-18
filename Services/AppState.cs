@@ -582,6 +582,60 @@ public sealed class AppState : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Changes the job code on every non-deleted entry of <paramref name="key"/> on
+    /// <see cref="ViewingDate"/> (and the active session when it matches).
+    /// </summary>
+    public string? ChangeTaskTypeJobCodeOnViewingDay(string key, JobCode newCode)
+    {
+        if (string.IsNullOrWhiteSpace(key) || newCode is null) return null;
+
+        var changed = false;
+        string? newKey = null;
+        foreach (var entry in _settings.Entries)
+        {
+            if (entry.IsDeleted) continue;
+            if (!TaskTypeSummary.IsOnDay(entry, ViewingDate)) continue;
+            if (TaskTypeSummary.KeyOf(entry) != key) continue;
+
+            entry.JobCodeId = newCode.Id;
+            entry.JobCodeText = newCode.Display;
+            newKey = TaskTypeSummary.KeyOf(entry);
+            changed = true;
+        }
+
+        if (ActiveSession is not null &&
+            TaskTypeSummary.KeyOf(
+                ActiveSession.TaskName,
+                ActiveSession.Category,
+                ActiveSession.JobCodeId,
+                ActiveSession.JobCodeText) == key)
+        {
+            ActiveSession = new ActiveSession
+            {
+                EntryId = ActiveSession.EntryId,
+                TaskName = ActiveSession.TaskName,
+                Category = ActiveSession.Category,
+                JobCodeId = newCode.Id,
+                JobCodeText = newCode.Display,
+                StartedUtc = ActiveSession.StartedUtc
+            };
+            StatusText = $"Tracking: {ActiveTaskLabel}";
+            newKey ??= TaskTypeSummary.KeyOf(
+                ActiveSession.TaskName,
+                ActiveSession.Category,
+                ActiveSession.JobCodeId,
+                ActiveSession.JobCodeText);
+            changed = true;
+        }
+
+        if (!changed) return null;
+
+        RefreshToday();
+        Persist();
+        return newKey;
+    }
+
+    /// <summary>
     /// Renames/recategorizes every non-deleted entry of <paramref name="key"/> on
     /// <see cref="ViewingDate"/> (and the active session when it matches). Job code is unchanged.
     /// </summary>

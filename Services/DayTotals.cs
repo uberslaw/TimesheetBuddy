@@ -8,8 +8,14 @@ namespace TimesheetBuddy.Services;
 /// </summary>
 public static class DayTotals
 {
+    /// <summary>Standard work day used for the main-window remaining-time line.</summary>
+    public static readonly TimeSpan ExpectedWorkDay = TimeSpan.FromHours(7.5);
+
     public static TimeSpan DurationAt(TimeEntry entry, DateTime utcNow) =>
         WeekCalendar.DurationAt(entry, utcNow);
+
+    public static TimeSpan TimeRemaining(TimeSpan logged) =>
+        logged >= ExpectedWorkDay ? TimeSpan.Zero : ExpectedWorkDay - logged;
 
     public static TimeSpan ForJobCode(IEnumerable<TimeEntry> entries, Guid jobCodeId, DateTime utcNow)
     {
@@ -74,15 +80,17 @@ public static class DayTotals
         if (rows.Count == 0)
             return "No time logged";
 
-        var lines = new List<string>(rows.Count + 1);
+        var width = Math.Max(5, rows.Max(r => r.Label.Length));
+        var lines = new List<string>(rows.Count + 2);
         var grand = TimeSpan.Zero;
         foreach (var row in rows)
         {
             grand += row.Total;
-            lines.Add($"{row.Label}  {FormatClock(row.Total)}");
+            lines.Add($"{row.Label.PadRight(width)}  {FormatClock(row.Total)}");
         }
 
-        lines.Add($"Total  {FormatClock(grand)}");
+        lines.Add($"{("Total").PadRight(width)}  {FormatClock(grand)}");
+        lines.Add($"{("Time Remaining").PadRight(width)}  {FormatClockHm(TimeRemaining(grand))}");
         return string.Join('\n', lines);
     }
 
@@ -92,6 +100,15 @@ public static class DayTotals
             duration = TimeSpan.Zero;
 
         return $"{(int)duration.TotalHours:00}:{duration.Minutes:00}:{duration.Seconds:00}";
+    }
+
+    /// <summary>Hours and minutes only (for remaining-time display).</summary>
+    public static string FormatClockHm(TimeSpan duration)
+    {
+        if (duration < TimeSpan.Zero)
+            duration = TimeSpan.Zero;
+
+        return $"{(int)duration.TotalHours:00}:{duration.Minutes:00}";
     }
 
     private static string PreferLabel(string existing, string incoming)

@@ -100,15 +100,74 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock x:Name="DayCodeTotalsText"
-                               FontFamily="Consolas, Cascadia Mono, Courier New"
-                               FontSize="11"
-                               LineHeight="15"
-                               Foreground="{StaticResource TimerBrush}"
-                               VerticalAlignment="Center"
-                               TextWrapping="Wrap"
-                               Text="No time logged"
-                               ToolTip="Time accounted for today by job code (most to least)"/>
+                    <StackPanel x:Name="DayTotalsPanel" VerticalAlignment="Center"
+                                ToolTip="Time accounted for today by job code (most to least). Remaining is 7.5h minus logged.">
+                        <TextBlock x:Name="DayCodeEmptyText"
+                                   FontSize="11"
+                                   Foreground="{StaticResource TimerBrush}"
+                                   Text="No time logged"
+                                   Visibility="Collapsed"/>
+                        <ItemsControl x:Name="DayCodeTotalsList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,0,0,1">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="74"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding Label}"
+                                                   FontSize="11"
+                                                   Foreground="{StaticResource TimerBrush}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding TimeText}"
+                                                   FontFamily="Consolas, Cascadia Mono, Courier New"
+                                                   FontSize="11"
+                                                   Foreground="{StaticResource TimerBrush}"
+                                                   HorizontalAlignment="Right"
+                                                   VerticalAlignment="Center"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Grid Margin="0,4,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="74"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Total"
+                                       FontSize="13"
+                                       FontWeight="Bold"
+                                       Foreground="{StaticResource TimerBrush}"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="1" x:Name="DayGrandTotalText"
+                                       FontFamily="Consolas, Cascadia Mono, Courier New"
+                                       FontSize="13"
+                                       FontWeight="Bold"
+                                       Foreground="{StaticResource TimerBrush}"
+                                       HorizontalAlignment="Right"
+                                       VerticalAlignment="Center"
+                                       Text="00:00:00"/>
+                        </Grid>
+                        <Grid Margin="0,2,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="74"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Time Remaining:"
+                                       FontSize="11"
+                                       Foreground="{StaticResource TimerBrush}"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="1" x:Name="DayRemainingText"
+                                       FontFamily="Consolas, Cascadia Mono, Courier New"
+                                       FontSize="11"
+                                       Foreground="{StaticResource TimerBrush}"
+                                       HorizontalAlignment="Right"
+                                       VerticalAlignment="Center"
+                                       Text="07:30"/>
+                        </Grid>
+                    </StackPanel>
                     <TextBlock Grid.Column="1" x:Name="TimerText"
                                FontFamily="Consolas, Cascadia Mono, Courier New"
                                FontSize="22" FontWeight="Bold"
@@ -218,6 +277,9 @@
                                                     <MenuItem x:Name="StartOrContinueItem"
                                                               Header="Start timer"
                                                               Click="StartTaskMenu_Click"
+                                                              CommandParameter="{Binding}"/>
+                                                    <MenuItem Header="Change job code…"
+                                                              Click="ChangeJobCodeMenu_Click"
                                                               CommandParameter="{Binding}"/>
                                                     <Separator/>
                                                     <MenuItem Header="Assign time and Delete…"
