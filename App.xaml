@@ -11,6 +11,7 @@
         <SolidColorBrush x:Key="WarnBrush" Color="#B45309"/>
         <SolidColorBrush x:Key="LineBrush" Color="#D5DBE3"/>
         <SolidColorBrush x:Key="TimerBrush" Color="#0B3D2E"/>
+        <SolidColorBrush x:Key="ActiveTimerBrush" Color="#C2410C"/>
 
         <Style TargetType="Window">
             <Setter Property="Background" Value="{StaticResource BgBrush}"/>
