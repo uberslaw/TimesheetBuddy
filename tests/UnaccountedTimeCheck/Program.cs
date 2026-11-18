@@ -56,8 +56,11 @@ Check(UnaccountedTime.Decide(5, timerRunning: true) == CatchUpPromptKind.AssignT
 Check(UnaccountedTime.Decide(15, timerRunning: false) == CatchUpPromptKind.AssignTasks,
     "gap + no timer → assign");
 Check(UnaccountedTime.AssignPromptText(5) ==
-      "5 unaccounted for minutes, would you like to assign tasks to them?",
+      "5 unaccounted for minutes, how would you like to assign the time?",
     "assign prompt wording");
+Check(UnaccountedTime.AssignPromptText(1) ==
+      "1 unaccounted for minute, how would you like to assign the time?",
+    "assign prompt singular wording");
 
 Console.WriteLine("windows");
 

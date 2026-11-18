@@ -37,7 +37,7 @@ TimesheetBuddy/
 ├── Views/
 │   ├── SettingsWindow.*            # Job codes, favorites, categories, prompts
 │   ├── RecheckWindow.*             # “Still working on X?”
-│   ├── FifteenMinuteWindow.*       # Assign tasks to unaccounted minutes (Not now cancels)
+│   ├── FifteenMinuteWindow.*       # Assign unaccounted minutes to active/today/new task
 │   ├── DayLogWindow.*              # Viewing-day entries + day notes
 │   ├── ManualEntryWindow.*         # Manual add from day log
 │   ├── AddTimeWindow.*             # HH:MM add-time dialog (no live timer)
@@ -120,7 +120,7 @@ Closing the app while a timer is running saves that task onto the current day's 
 - **Singletons on `App`**: `App.State`, `App.Scheduler`, `App.Store`.
 - **PromptScheduler** ticks every second; only one modal prompt at a time (`RecheckOpen` / `FifteenOpen`).
 - Catch-up measures the last N minutes (`FifteenMinuteIntervalMinutes`, same value the scheduler waits). Accounted time is the union of logged entries plus the running timer's elapsed overlap. A gap under 30 seconds counts as zero. If at least one minute is unaccounted, the assign-tasks dialog opens and the still-working dialog does not. If nothing is unaccounted and a timer is running, the existing still-working window opens instead. If nothing is unaccounted and no timer is running, no popup appears.
-- The still-working window stays until the user chooses. Catch-up can be dismissed with Not now, which does not create entries. Save is allowed only when the assigned minutes are positive and do not exceed the unaccounted total (assigning less is allowed).
+- The still-working window stays until the user chooses. Catch-up asks how to assign the whole unaccounted block: last active task, another task logged today, or a newly entered task. Not now dismisses without creating entries.
 - Selecting a job code in the main window **starts** the timer immediately.
 
 ## Known gaps / follow-ups

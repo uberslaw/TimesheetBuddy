@@ -3,86 +3,80 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Unaccounted time"
         Icon="/Assets/TimesheetBuddy.ico"
-        Height="520" Width="1020"
-        MinHeight="440" MinWidth="880"
+        Width="620"
+        SizeToContent="Height"
         WindowStartupLocation="CenterScreen"
         Topmost="True"
         ShowInTaskbar="True"
-        ResizeMode="CanResize"
+        ResizeMode="NoResize"
         Background="{StaticResource BgBrush}">
-    <DockPanel Margin="16">
-        <DockPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
-            <TextBlock x:Name="MinutesHint" VerticalAlignment="Center"
-                       Foreground="{StaticResource MutedBrush}" FontSize="11"/>
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Style="{StaticResource CompactButton}" Content="Add row" Margin="0,0,8,0"
-                        Click="AddRow_Click"/>
-                <Button Style="{StaticResource CompactButton}" Content="Not now" Width="90" Margin="0,0,8,0"
-                        IsCancel="True"/>
-                <Button x:Name="SaveButton" Style="{StaticResource PrimaryButton}" Content="Save &amp; continue" Width="140"
-                        IsDefault="True" Click="Save_Click"/>
-            </StackPanel>
-        </DockPanel>
+    <StackPanel Margin="20">
+        <TextBlock x:Name="PromptTitle" FontSize="14" TextWrapping="Wrap" Margin="0,0,0,16"/>
 
-        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
-            <TextBlock x:Name="PromptTitle" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap"
-                       Text="0 unaccounted for minutes, would you like to assign tasks to them?"/>
-            <TextBlock Margin="0,6,0,0" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"
-                       Text="Pick one or more tasks and assign minutes that add up to that time. You can give the whole gap to one task, or leave some unaccounted. Not now adds nothing."/>
-        </StackPanel>
+        <!-- Last active / most recent task -->
+        <Grid x:Name="ActiveRow" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="ActiveLabel" VerticalAlignment="Center" TextWrapping="Wrap"
+                       FontWeight="SemiBold" Margin="0,0,12,0"/>
+            <Button x:Name="AssignActiveButton" Grid.Column="1" Style="{StaticResource PrimaryButton}"
+                    Content="Assign" MinWidth="88" Click="AssignActive_Click" IsDefault="True"/>
+        </Grid>
+
+        <!-- Today's logged tasks -->
+        <Grid Margin="0,0,0,14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="Assign to" VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <ComboBox x:Name="TodayTasksCombo" Grid.Column="1" DisplayMemberPath="Display"
+                      VerticalAlignment="Center" Margin="0,0,12,0"/>
+            <Button x:Name="AssignTodayButton" Grid.Column="2" Style="{StaticResource CompactButton}"
+                    Content="Assign" MinWidth="88" Click="AssignToday_Click"/>
+        </Grid>
+
+        <!-- Enter a new task -->
+        <Border Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource LineBrush}"
+                BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,16">
+            <StackPanel>
+                <TextBlock Text="Or enter a new task" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="120"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="160"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="Task name" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,2"/>
+                        <TextBox x:Name="NewTaskBox"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="Category" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,2"/>
+                        <ComboBox x:Name="NewCategoryCombo" IsEditable="True"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="4">
+                        <TextBlock Text="Job code" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,2"/>
+                        <ComboBox x:Name="NewCodeCombo" DisplayMemberPath="Display"/>
+                    </StackPanel>
+                    <Button Grid.Column="6" Style="{StaticResource CompactButton}" Content="Assign"
+                            MinWidth="88" VerticalAlignment="Bottom" Click="AssignNew_Click"/>
+                </Grid>
+            </StackPanel>
+        </Border>
 
         <DockPanel>
-            <Border DockPanel.Dock="Top" Background="{StaticResource AccentSoftBrush}"
-                    CornerRadius="6" Padding="10" Margin="0,0,0,10">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="Common tasks:" VerticalAlignment="Center" Margin="0,0,10,0"
-                               FontWeight="SemiBold"/>
-                    <ComboBox x:Name="CommonTasksCombo" Width="280" DisplayMemberPath="Name"/>
-                    <Button Style="{StaticResource CompactButton}" Content="Insert into new row"
-                            Margin="8,0,0,0" Click="InsertCommon_Click"/>
-                </StackPanel>
-            </Border>
-
-            <DataGrid x:Name="RowsGrid"
-                      AutoGenerateColumns="False"
-                      CanUserAddRows="False"
-                      HeadersVisibility="Column"
-                      GridLinesVisibility="Horizontal"
-                      BorderBrush="{StaticResource LineBrush}"
-                      AlternatingRowBackground="#F8FAFC">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="Task name"
-                                        Binding="{Binding TaskName, UpdateSourceTrigger=PropertyChanged}"
-                                        Width="150"/>
-                    <DataGridComboBoxColumn x:Name="CategoryCol" Header="Category"
-                                            Width="110"
-                                            SelectedItemBinding="{Binding Category, UpdateSourceTrigger=PropertyChanged}"/>
-                    <DataGridComboBoxColumn x:Name="CommonCol" Header="Common task"
-                                            Width="140"
-                                            DisplayMemberPath="Name"
-                                            SelectedValuePath="Name"
-                                            SelectedValueBinding="{Binding CommonTaskName, UpdateSourceTrigger=PropertyChanged}"/>
-                    <DataGridTextColumn Header="Comment / what you did"
-                                        Binding="{Binding Notes, UpdateSourceTrigger=PropertyChanged}"
-                                        Width="*"/>
-                    <DataGridComboBoxColumn x:Name="CodeCol" Header="Job code"
-                                            Width="160"
-                                            DisplayMemberPath="Display"
-                                            SelectedValuePath="Id"
-                                            SelectedValueBinding="{Binding JobCodeId, UpdateSourceTrigger=PropertyChanged}"/>
-                    <DataGridComboBoxColumn x:Name="MinutesCol" Header="Minutes"
-                                            Width="80"
-                                            SelectedItemBinding="{Binding Minutes, UpdateSourceTrigger=PropertyChanged}"/>
-                    <DataGridTemplateColumn Header="" Width="50">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
-                                <Button Content="✕" Style="{StaticResource GhostButton}"
-                                        Click="RemoveRow_Click" Tag="{Binding}"/>
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
-                </DataGrid.Columns>
-            </DataGrid>
+            <Button DockPanel.Dock="Right" Style="{StaticResource CompactButton}" Content="Not now"
+                    Width="90" IsCancel="True" Click="NotNow_Click"/>
+            <TextBlock x:Name="MinutesHint" VerticalAlignment="Center"
+                       Foreground="{StaticResource MutedBrush}" FontSize="11"/>
         </DockPanel>
-    </DockPanel>
+    </StackPanel>
 </Window>

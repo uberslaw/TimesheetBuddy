@@ -106,8 +106,13 @@ public static class UnaccountedTime
         return CatchUpPromptKind.None;
     }
 
-    public static string AssignPromptText(int unaccountedMinutes) =>
-        $"{unaccountedMinutes} unaccounted for minutes, would you like to assign tasks to them?";
+    public static string AssignPromptText(int unaccountedMinutes)
+    {
+        var amount = unaccountedMinutes == 1
+            ? "1 unaccounted for minute"
+            : $"{unaccountedMinutes} unaccounted for minutes";
+        return $"{amount}, how would you like to assign the time?";
+    }
 
     /// <summary>
     /// Places assignments in the uncovered gaps, latest gap first, without
