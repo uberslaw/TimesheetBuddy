@@ -232,18 +232,21 @@ public partial class MainWindow : Window
 
         _dayCodeRows.Clear();
         var grand = TimeSpan.Zero;
-        foreach (var row in rows)
+        var percents = PercentBreakdown.Shares(rows.Select(r => r.Total).ToList());
+        for (var i = 0; i < rows.Count; i++)
         {
+            var row = rows[i];
             grand += row.Total;
-            _dayCodeRows.Add(new DayCodeTotalRowModel(row.Label, DayTotals.FormatCompact(row.Total)));
+            var percentText = percents.Count == rows.Count ? PercentBreakdown.Format(percents[i]) : string.Empty;
+            _dayCodeRows.Add(new DayCodeTotalRowModel(row.Label, DayTotals.FormatCompact(row.Total), percentText));
         }
 
         DayCodeEmptyText.Visibility = rows.Count == 0 && !showNoTask ? Visibility.Visible : Visibility.Collapsed;
         DayGrandTotalText.Text = DayTotals.FormatCompact(grand);
         DayRemainingText.Text = DayTotals.FormatCompact(DayTotals.TimeRemaining(grand));
         DayTotalsPanel.ToolTip = _state.IsHistoryMode
-            ? $"Time accounted for {_state.ViewingDate:d MMM yyyy} by job code (most to least). Remaining is 7.5h minus logged."
-            : "Time accounted for today by job code (most to least). Remaining is 7.5h minus logged.";
+            ? $"Time accounted for {_state.ViewingDate:d MMM yyyy} by job code (most to least), with each code's share of Total. Remaining is 7.5h minus logged."
+            : "Time accounted for today by job code (most to least), with each code's share of Total. Remaining is 7.5h minus logged.";
     }
 
     private void SavePlacement() =>
@@ -1491,10 +1494,11 @@ public partial class MainWindow : Window
     }
 }
 
-public sealed class DayCodeTotalRowModel(string label, string timeText)
+public sealed class DayCodeTotalRowModel(string label, string timeText, string percentText)
 {
     public string Label { get; } = label;
     public string TimeText { get; } = timeText;
+    public string PercentText { get; } = percentText;
 }
 
 public sealed class TaskSegmentRowModel
