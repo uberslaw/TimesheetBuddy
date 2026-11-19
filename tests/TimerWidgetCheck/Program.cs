@@ -1,3 +1,4 @@
+using TimesheetBuddy.Models;
 using TimesheetBuddy.Services;
 
 var failures = new List<string>();
@@ -63,6 +64,66 @@ Check(sl == 2500 && st == 400, "second monitor position is kept");
 
 var (gl, gt) = TimerWidgetLayout.Resolve(5000, 400, 240, 84, work, twoMonitors, false);
 Check(gl == dl && gt == dt, "position on a missing monitor falls back to default");
+
+// No Task Selected line.
+Check(TimerWidgetLayout.TaskLine(false, null, noTaskRunning: true) == "No Task Selected", "idle after Stop reads No Task Selected");
+Check(TimerWidgetLayout.TaskLine(true, "Feature work", noTaskRunning: true) == "Feature work", "a running task wins over No Task Selected");
+
+// Corner docking: 12 in from both edges of the monitor's work area, so bottom corners sit above the taskbar.
+const double w = 268, h = 96;
+var (tlx, tly) = TimerWidgetLayout.CornerPosition(work, w, h, WidgetCorner.TopLeft);
+Check(tlx == 12 && tly == 12, "top-left dock");
+var (trx, try_) = TimerWidgetLayout.CornerPosition(work, w, h, WidgetCorner.TopRight);
+Check(trx == 1920 - w - 12 && try_ == 12, "top-right dock");
+var (blx, bly) = TimerWidgetLayout.CornerPosition(work, w, h, WidgetCorner.BottomLeft);
+Check(blx == 12 && bly == 1040 - h - 12, "bottom-left dock stays above the taskbar");
+var (brx, bry) = TimerWidgetLayout.CornerPosition(work, w, h, WidgetCorner.BottomRight);
+Check(brx == 1920 - w - 12 && bry == 1040 - h - 12, "bottom-right dock stays above the taskbar");
+Check(TimerWidgetLayout.DefaultPosition(work, w, h) == (brx, bry), "default matches the bottom-right dock");
+
+var topTaskbar = new WidgetArea(0, 40, 1920, 1080);
+var (_, ttop) = TimerWidgetLayout.CornerPosition(topTaskbar, w, h, WidgetCorner.TopLeft);
+Check(ttop == 52, "top dock stays below a top taskbar");
+
+var leftMonitor = new WidgetArea(-1280, 0, 0, 984);
+var (lmx, lmy) = TimerWidgetLayout.CornerPosition(leftMonitor, w, h, WidgetCorner.BottomRight);
+Check(lmx == -w - 12 && lmy == 984 - h - 12, "docks on a monitor left of the primary");
+var (rx, ry) = TimerWidgetLayout.Resolve(lmx, lmy, w, h, work, new WidgetArea(-1280, 0, 1920, 1080), false);
+Check(rx == lmx && ry == lmy, "a docked position on another monitor survives the next show");
+var (px, py) = TimerWidgetLayout.Resolve(brx, bry, w, h, work, screen, true);
+Check(px == brx && py == bry, "a docked position on the primary survives the next show");
+
+var tiny = new WidgetArea(0, 0, 200, 80);
+var (sx, sy) = TimerWidgetLayout.CornerPosition(tiny, w, h, WidgetCorner.BottomRight);
+Check(sx == 0 && sy == 0, "an area smaller than the widget pins it to the area's top-left");
+
+// Device pixels to WPF units (150% scaling gives 2/3).
+var dips = TimerWidgetLayout.FromDevice(new WidgetArea(0, 0, 2880, 1560), 2.0 / 3, 2.0 / 3);
+Check(Math.Abs(dips.Right - 1920) < 0.001 && Math.Abs(dips.Bottom - 1040) < 0.001, "150% monitor converts to WPF units");
+var bad = TimerWidgetLayout.FromDevice(new WidgetArea(0, 0, 100, 100), double.NaN, 0);
+Check(bad.Right == 100 && bad.Bottom == 100, "a bad scale falls back to 1");
+
+// Start resumes the most recent real task type, preferring today's.
+var today = DateTime.Today;
+TimeEntry Entry(string name, string category, string code, DateTime startLocal, bool deleted = false) => new()
+{
+    TaskName = name,
+    Category = category,
+    JobCodeText = code,
+    StartUtc = startLocal.ToUniversalTime(),
+    EndUtc = startLocal.AddMinutes(10).ToUniversalTime(),
+    IsDeleted = deleted
+};
+var yesterdayLate = Entry("Old work", "General", "DEV", today.AddDays(-1).AddHours(23));
+var todayEarly = Entry("Email", "Admin", "ADMIN", today.AddHours(8));
+var todayLater = Entry("Feature work", "Development", "DEV", today.AddHours(9));
+var todayBreak = Entry("Break", "Break", "", today.AddHours(10));
+var todayDeleted = Entry("Deleted", "General", "DEV", today.AddHours(11), deleted: true);
+var picked = AppState.LatestWorkedEntry([yesterdayLate, todayEarly, todayLater, todayBreak, todayDeleted], today);
+Check(ReferenceEquals(picked, todayLater), "Start resumes today's most recent task, skipping Break and deleted rows");
+Check(ReferenceEquals(AppState.LatestWorkedEntry([yesterdayLate, todayBreak], today), yesterdayLate),
+    "with nothing real today, Start resumes the most recent earlier task");
+Check(AppState.LatestWorkedEntry([todayBreak, todayDeleted], today) is null, "nothing to resume opens the app instead");
 
 if (failures.Count == 0)
 {

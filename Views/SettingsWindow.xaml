@@ -80,8 +80,7 @@
 
             <TabItem Header="Prompts &amp; pin">
                 <StackPanel Margin="10">
-                    <CheckBox x:Name="AlwaysOnTopCheck" Content="Pin window always on top" Margin="0,0,0,8"/>
-                    <CheckBox x:Name="TimerWidgetCheck" Content="Show a small timer widget while minimized" Margin="0,0,0,12"/>
+                    <CheckBox x:Name="AlwaysOnTopCheck" Content="Pin window always on top" Margin="0,0,0,12"/>
 
                     <TextBlock FontWeight="SemiBold" Text="Still-working recheck" Margin="0,0,0,6"/>
                     <CheckBox x:Name="RecheckEnabledCheck" Content="Ask me if I'm still on the active task" Margin="0,0,0,8"/>
@@ -103,6 +102,20 @@
                         <TextBlock Text="minutes (popup stays until you respond)"
                                    VerticalAlignment="Center" Margin="8,0,0,0"
                                    Foreground="{StaticResource MutedBrush}"/>
+                    </StackPanel>
+                </StackPanel>
+            </TabItem>
+
+            <TabItem x:Name="WidgetTab" Header="Widget">
+                <StackPanel Margin="10">
+                    <TextBlock FontWeight="SemiBold" Text="Show when minimized" Margin="0,0,0,6"/>
+                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,8" Foreground="{StaticResource MutedBrush}"
+                               Text="A small always-on-top timer with Start, Stop and corner-dock arrows while the main window is minimized."/>
+                    <StackPanel Orientation="Horizontal">
+                        <RadioButton x:Name="WidgetEnableRadio" GroupName="WidgetShow" Content="Enable"
+                                     Margin="0,0,16,0" VerticalContentAlignment="Center"/>
+                        <RadioButton x:Name="WidgetDisableRadio" GroupName="WidgetShow" Content="Disable"
+                                     VerticalContentAlignment="Center"/>
                     </StackPanel>
                 </StackPanel>
             </TabItem>

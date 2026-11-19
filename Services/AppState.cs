@@ -917,6 +917,49 @@ public sealed class AppState : INotifyPropertyChanged
             return;
         _settings.ShowTimerWidget = show;
         Persist();
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// The task type the widget's Start resumes: the most recently started entry today, else the
+    /// most recent on any day. Deleted entries and Break are skipped.
+    /// </summary>
+    public static TimeEntry? LatestWorkedEntry(IEnumerable<TimeEntry> entries, DateTime todayLocal)
+    {
+        TimeEntry? today = null;
+        TimeEntry? any = null;
+        foreach (var entry in entries)
+        {
+            if (entry is null || entry.IsDeleted) continue;
+            if (string.IsNullOrWhiteSpace(entry.TaskName) && entry.JobCodeId is null &&
+                string.IsNullOrWhiteSpace(entry.JobCodeText))
+                continue;
+            if (string.Equals(entry.TaskName?.Trim(), LockIntervalSplit.BreakTaskName, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(entry.Category?.Trim(), LockIntervalSplit.BreakCategory, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (any is null || entry.StartUtc > any.StartUtc)
+                any = entry;
+            if (TaskTypeSummary.IsOnDay(entry, todayLocal) && (today is null || entry.StartUtc > today.StartUtc))
+                today = entry;
+        }
+
+        return today ?? any;
+    }
+
+    public TimeEntry? LastWorkedEntry() => LatestWorkedEntry(_settings.Entries, DateTime.Today);
+
+    /// <summary>Starts the last worked task type again. False when there is none (or a task is already running).</summary>
+    public bool ResumeLastTask()
+    {
+        if (IsHistoryMode || ActiveSession is not null) return false;
+
+        var last = LastWorkedEntry();
+        if (last is null) return false;
+
+        var code = FindJobCode(last.JobCodeId);
+        StartOrSwitch(last.TaskName, last.Category, last.JobCodeId, code?.Display ?? last.JobCodeText);
+        return ActiveSession is not null;
     }
 
     public IEnumerable<TimeEntry> EntriesForDay(DateTime dayLocal) =>

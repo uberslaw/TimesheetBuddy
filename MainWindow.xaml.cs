@@ -42,7 +42,12 @@ public partial class MainWindow : Window
         _lockWatcher.UnlockPrompt += OnScreenUnlocked;
         _uiTimer.Tick += (_, _) => RefreshTimer();
         _state.PropertyChanged += StateOnPropertyChanged;
-        _state.SettingsChanged += (_, _) => ReloadSelectors();
+        _state.SettingsChanged += (_, _) =>
+        {
+            ReloadSelectors();
+            if (!_state.Settings.ShowTimerWidget)
+                HideTimerWidget();
+        };
         _state.ViewingDateChanged += (_, _) => Dispatcher.Invoke(() =>
         {
             ApplyModeUi();
@@ -708,7 +713,10 @@ public partial class MainWindow : Window
         TryStartFromInputs();
     }
 
-    private void Stop_Click(object sender, RoutedEventArgs e)
+    private void Stop_Click(object sender, RoutedEventArgs e) => StopFromUser();
+
+    /// <summary>The one user stop path (main Stop and the widget); starts No Task Selected.</summary>
+    private void StopFromUser()
     {
         if (_state.IsHistoryMode) return;
         _state.StopActive(save: true);
@@ -896,6 +904,10 @@ public partial class MainWindow : Window
         var jobCodes = new MenuItem { Header = "Job code view" };
         jobCodes.Click += (_, _) => OpenJobCodeView();
         menu.Items.Add(jobCodes);
+
+        var settings = new MenuItem { Header = "Settings…" };
+        settings.Click += (_, _) => OpenSettings(false);
+        menu.Items.Add(settings);
 
         menu.Items.Add(new Separator());
 
@@ -1166,6 +1178,8 @@ public partial class MainWindow : Window
         {
             _widget = new TimerWidgetWindow();
             _widget.RestoreRequested += (_, _) => RestoreFromWidget();
+            _widget.StartRequested += (_, _) => StartFromWidget();
+            _widget.StopRequested += (_, _) => StopFromUser();
             _widget.Closed += (_, _) => _widget = null;
         }
 
@@ -1173,6 +1187,22 @@ public partial class MainWindow : Window
     }
 
     private void HideTimerWidget() => _widget?.HideWidget();
+
+    /// <summary>Resumes the last worked task type; with nothing to resume, opens the app to pick one.</summary>
+    private void StartFromWidget()
+    {
+        if (_closing || _state.IsHistoryMode || _state.ActiveSession is not null)
+            return;
+
+        if (!_state.ResumeLastTask())
+        {
+            RestoreFromWidget();
+            return;
+        }
+
+        _scheduler.OnSessionChanged();
+        BindStatus();
+    }
 
     private void RestoreFromWidget()
     {

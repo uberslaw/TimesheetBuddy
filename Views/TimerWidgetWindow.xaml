@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Timesheet Buddy timer"
         Icon="/Assets/TimesheetBuddy.ico"
-        Width="240" Height="84"
+        Width="268" Height="96"
         WindowStyle="None"
         ResizeMode="NoResize"
         AllowsTransparency="True"
@@ -15,34 +15,131 @@
         Cursor="Hand"
         ToolTip="Drag to move. Click to open Timesheet Buddy."
         MouseLeftButtonDown="Widget_MouseLeftButtonDown">
+    <Window.Resources>
+        <Geometry x:Key="DockArrowGeometry">M8,8 L1.5,1.5 M1.5,6 L1.5,1.5 L6,1.5</Geometry>
+
+        <Style x:Key="DockArrowButton" TargetType="Button">
+            <Setter Property="Width" Value="14"/>
+            <Setter Property="Height" Value="14"/>
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+            <Setter Property="Opacity" Value="0.55"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="Transparent">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                    <Setter Property="Opacity" Value="1"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="DockArrowPath" TargetType="Path">
+            <Setter Property="Width" Value="9"/>
+            <Setter Property="Height" Value="9"/>
+            <Setter Property="Data" Value="{StaticResource DockArrowGeometry}"/>
+            <Setter Property="Stroke" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+            <Setter Property="StrokeThickness" Value="1.4"/>
+            <Setter Property="StrokeStartLineCap" Value="Round"/>
+            <Setter Property="StrokeEndLineCap" Value="Round"/>
+            <Setter Property="StrokeLineJoin" Value="Round"/>
+            <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+        </Style>
+    </Window.Resources>
     <Border Background="{StaticResource AccentSoftBrush}"
             BorderBrush="{StaticResource LineBrush}"
             BorderThickness="1"
-            CornerRadius="8"
-            Padding="10,5">
-        <StackPanel VerticalAlignment="Center">
-            <TextBlock x:Name="HeaderText"
-                       FontSize="11"
-                       Foreground="{StaticResource MutedBrush}"
-                       HorizontalAlignment="Center"
-                       TextAlignment="Center"
-                       TextTrimming="CharacterEllipsis"
-                       Text="Idle"/>
-            <TextBlock x:Name="TaskText"
-                       FontSize="13"
-                       FontWeight="SemiBold"
-                       Foreground="{StaticResource InkBrush}"
-                       HorizontalAlignment="Center"
-                       TextAlignment="Center"
-                       TextTrimming="CharacterEllipsis"
-                       Text="No active task"/>
-            <TextBlock x:Name="ElapsedText"
-                       FontFamily="Consolas, Cascadia Mono, Courier New"
-                       FontSize="20"
-                       FontWeight="Bold"
-                       Foreground="{StaticResource ActiveTimerBrush}"
-                       HorizontalAlignment="Center"
-                       Text="00:00:00"/>
-        </StackPanel>
+            CornerRadius="8">
+        <Grid>
+            <StackPanel VerticalAlignment="Center" Margin="20,4,20,4">
+                <TextBlock x:Name="HeaderText"
+                           FontSize="11"
+                           Foreground="{StaticResource MutedBrush}"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           TextTrimming="CharacterEllipsis"
+                           Text="Idle"/>
+                <TextBlock x:Name="TaskText"
+                           FontSize="13"
+                           FontWeight="SemiBold"
+                           Foreground="{StaticResource InkBrush}"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           TextTrimming="CharacterEllipsis"
+                           Text="No active task"/>
+                <Grid Margin="0,1,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <!-- Slots catch presses on a disabled button, which WPF does not hit-test,
+                         so those never fall through to drag / open the app. -->
+                    <Border x:Name="StartSlot" Background="Transparent" VerticalAlignment="Center"
+                            MouseLeftButtonDown="ControlSlot_MouseLeftButtonDown">
+                        <Button x:Name="StartButton" Style="{StaticResource PrimaryButton}"
+                                Content="▶" FontSize="10" Padding="8,2" Focusable="False"
+                                ToolTipService.ShowOnDisabled="True"
+                                ToolTip="Start"
+                                Click="Start_Click"/>
+                    </Border>
+                    <TextBlock x:Name="ElapsedText" Grid.Column="1"
+                               FontFamily="Consolas, Cascadia Mono, Courier New"
+                               FontSize="20"
+                               FontWeight="Bold"
+                               Foreground="{StaticResource ActiveTimerBrush}"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Margin="6,0"
+                               Text="00:00:00"/>
+                    <Border x:Name="StopSlot" Grid.Column="2" Background="Transparent" VerticalAlignment="Center"
+                            MouseLeftButtonDown="ControlSlot_MouseLeftButtonDown">
+                        <Button x:Name="StopButton" Style="{StaticResource CompactButton}"
+                                Content="■" FontSize="10" Padding="8,2" Focusable="False"
+                                ToolTipService.ShowOnDisabled="True"
+                                ToolTip="Stop"
+                                Click="Stop_Click"/>
+                    </Border>
+                </Grid>
+            </StackPanel>
+
+            <Button Style="{StaticResource DockArrowButton}" Tag="TopLeft" ToolTip="Dock top-left"
+                    HorizontalAlignment="Left" VerticalAlignment="Top" Click="Dock_Click">
+                <Path Style="{StaticResource DockArrowPath}"/>
+            </Button>
+            <Button Style="{StaticResource DockArrowButton}" Tag="TopRight" ToolTip="Dock top-right"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" Click="Dock_Click">
+                <Path Style="{StaticResource DockArrowPath}">
+                    <Path.RenderTransform>
+                        <ScaleTransform ScaleX="-1"/>
+                    </Path.RenderTransform>
+                </Path>
+            </Button>
+            <Button Style="{StaticResource DockArrowButton}" Tag="BottomLeft" ToolTip="Dock bottom-left"
+                    HorizontalAlignment="Left" VerticalAlignment="Bottom" Click="Dock_Click">
+                <Path Style="{StaticResource DockArrowPath}">
+                    <Path.RenderTransform>
+                        <ScaleTransform ScaleY="-1"/>
+                    </Path.RenderTransform>
+                </Path>
+            </Button>
+            <Button Style="{StaticResource DockArrowButton}" Tag="BottomRight" ToolTip="Dock bottom-right"
+                    HorizontalAlignment="Right" VerticalAlignment="Bottom" Click="Dock_Click">
+                <Path Style="{StaticResource DockArrowPath}">
+                    <Path.RenderTransform>
+                        <ScaleTransform ScaleX="-1" ScaleY="-1"/>
+                    </Path.RenderTransform>
+                </Path>
+            </Button>
+        </Grid>
     </Border>
 </Window>
