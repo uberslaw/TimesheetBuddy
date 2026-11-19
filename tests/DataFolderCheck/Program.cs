@@ -159,6 +159,25 @@ try
     store.Save(settings);
     Check(new SettingsStore(empty).Load().FifteenMinuteIntervalMinutes == 25, "saves go to the new folder");
     Check(File.ReadAllText(Path.Combine(current, "settings.json")) == "{ \"current\": true }", "the old folder is untouched");
+
+    // A move never takes this PC's client id, its session file or the crash log along.
+    var withMachineFiles = Path.Combine(root, "machine");
+    var moveTarget = Path.Combine(root, "move-target");
+    Directory.CreateDirectory(Path.Combine(withMachineFiles, "sessions"));
+    Directory.CreateDirectory(moveTarget);
+    File.WriteAllText(Path.Combine(withMachineFiles, "settings.json"), "{}");
+    File.WriteAllText(Path.Combine(withMachineFiles, ClientIdentity.FileName), "{}");
+    File.WriteAllText(Path.Combine(withMachineFiles, "crash.log"), "x");
+    File.WriteAllText(Path.Combine(withMachineFiles, "sessions", "abc.json"), "{}");
+    var moved = DataFolder.Transfer(withMachineFiles, moveTarget, move: true, stamp);
+    Check(moved.Copied.SequenceEqual(["settings.json"]) && moved.Removed.SequenceEqual(["settings.json"]),
+        "move transfers only the data files");
+    Check(File.Exists(Path.Combine(withMachineFiles, ClientIdentity.FileName)) &&
+          File.Exists(Path.Combine(withMachineFiles, "crash.log")) &&
+          File.Exists(Path.Combine(withMachineFiles, "sessions", "abc.json")) &&
+          !File.Exists(Path.Combine(moveTarget, ClientIdentity.FileName)) &&
+          !Directory.Exists(Path.Combine(moveTarget, "sessions")),
+        "client.json, crash.log and session files stay where they are");
 }
 finally
 {

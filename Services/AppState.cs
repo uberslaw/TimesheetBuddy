@@ -1141,6 +1141,10 @@ public sealed class AppState : INotifyPropertyChanged
 
     public void LogOverlap(string summary) => Journal?.Append(ChangeJournal.Actions.Overlap, summary);
 
+    public void LogFolderChange(string summary) => Journal?.Append(ChangeJournal.Actions.Folder, summary);
+
+    public void LogImport(string summary) => Journal?.Append(ChangeJournal.Actions.Import, summary);
+
     private void ReloadFromSettings()
     {
         JobCodes.Clear();

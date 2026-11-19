@@ -1132,6 +1132,10 @@ public partial class MainWindow : Window
         changeLog.Click += (_, _) => new ChangeLogWindow { Owner = this }.ShowDialog();
         menu.Items.Add(changeLog);
 
+        var import = new MenuItem { Header = "Import data…", ToolTip = "Bring entries in from a backup, another folder or an earlier release" };
+        import.Click += (_, _) => new ImportDataWindow { Owner = this }.ShowDialog();
+        menu.Items.Add(import);
+
         var jobCodes = new MenuItem { Header = "Job code view" };
         jobCodes.Click += (_, _) => OpenJobCodeView();
         menu.Items.Add(jobCodes);

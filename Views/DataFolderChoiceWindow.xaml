@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Data folder — Timesheet Buddy 3.0"
         Icon="/Assets/TimesheetBuddy.ico"
-        Width="480" SizeToContent="Height"
+        Width="500" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
@@ -12,23 +12,38 @@
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
             <Button Style="{StaticResource CompactButton}" Content="Cancel" Width="80" Margin="0,0,8,0"
                     IsCancel="True" Click="Cancel_Click"/>
-            <Button Style="{StaticResource CompactButton}" Content="Replace" Width="90" Margin="0,0,8,0"
+            <Button x:Name="ReplaceButton" Style="{StaticResource CompactButton}" Content="Replace" Width="90" Margin="0,0,8,0"
                     Click="Replace_Click"/>
-            <Button Style="{StaticResource PrimaryButton}" Content="Use existing" Width="100"
+            <Button x:Name="MergeButton" Style="{StaticResource CompactButton}" Content="Merge" Width="90" Margin="0,0,8,0"
+                    Click="Merge_Click"/>
+            <Button x:Name="UseExistingButton" Style="{StaticResource PrimaryButton}" Content="Use existing" Width="100"
                     IsDefault="True" Click="UseExisting_Click"/>
+            <Button x:Name="CopyButton" Style="{StaticResource PrimaryButton}" Content="OK" Width="100"
+                    Click="Copy_Click"/>
         </StackPanel>
 
         <StackPanel>
-            <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,8"
-                       Text="This folder already has Timesheet Buddy data. Use that data (your current data stays in the old folder), or replace it with your current data?"/>
+            <TextBlock x:Name="HeadingText" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,8"/>
             <TextBlock x:Name="FolderText" TextWrapping="Wrap" Margin="0,0,0,10"
                        Foreground="{StaticResource MutedBrush}"/>
-            <TextBlock TextWrapping="Wrap" Margin="0,0,0,4" FontSize="11"
-                       Text="Use existing: Timesheet Buddy saves your current data where it is, then restarts using the data in the new folder."/>
-            <TextBlock x:Name="TimerWarning" TextWrapping="Wrap" Margin="0,0,0,4" FontSize="11"
-                       FontWeight="SemiBold" Visibility="Collapsed"
-                       Text="The running timer is stopped and saved to the current folder first."/>
-            <TextBlock x:Name="ReplaceText" TextWrapping="Wrap" FontSize="11"/>
+            <StackPanel x:Name="ChoicesPanel">
+                <TextBlock TextWrapping="Wrap" Margin="0,0,0,4" FontSize="11"
+                           Text="Use existing: Timesheet Buddy saves your current data where it is, then restarts using the data in the new folder."/>
+                <TextBlock x:Name="TimerWarning" TextWrapping="Wrap" Margin="0,0,0,4" FontSize="11"
+                           FontWeight="SemiBold" Visibility="Collapsed"
+                           Text="The running timer is stopped and saved to the current folder first."/>
+                <TextBlock TextWrapping="Wrap" Margin="0,0,0,4" FontSize="11"
+                           Text="Merge: your current entries, day notes and App Track usage are added to the data already there (for example from another PC), then that folder is used from now on. Nothing in it is lost."/>
+                <TextBlock x:Name="ReplaceText" TextWrapping="Wrap" FontSize="11"/>
+            </StackPanel>
+            <TextBlock x:Name="CopyText" TextWrapping="Wrap" FontSize="11" Visibility="Collapsed"
+                       Text="Your settings, time entries, day notes, App Track usage, daily snapshots and change log are copied there, checked, and used from now on."/>
+            <CheckBox x:Name="MoveCheck" Margin="0,12,0,0">
+                <TextBlock TextWrapping="Wrap"
+                           Text="Move my data: delete it from the old folder once the copy is checked"/>
+            </CheckBox>
+            <TextBlock x:Name="MoveNote" TextWrapping="Wrap" FontSize="11" Margin="20,2,0,0"
+                       Foreground="{StaticResource MutedBrush}"/>
         </StackPanel>
     </DockPanel>
 </Window>
