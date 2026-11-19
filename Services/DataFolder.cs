@@ -4,7 +4,7 @@ using System.Text.Json;
 namespace TimesheetBuddy.Services;
 
 /// <summary>
-/// Where settings.json and the day notes live. The choice is kept in a pointer file that always
+/// Where settings.json, the day notes and the App Track usage files live. The choice is kept in a pointer file that always
 /// stays in the default folder, so it can be found before settings.json is. No WPF here.
 /// </summary>
 public static class DataFolder
@@ -12,6 +12,7 @@ public static class DataFolder
     public const string SettingsFileName = "settings.json";
     public const string PointerFileName = "datafolder.json";
     public const string DayNotesPattern = "day-notes-*.txt";
+    public const string AppUsagePattern = "app-usage-*.json";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -138,18 +139,27 @@ public static class DataFolder
         return HasData(targetFolder) ? ChangeKind.TargetHasData : ChangeKind.CopyToEmpty;
     }
 
-    /// <summary>File names that make up the app's data in a folder: settings.json, then day notes.</summary>
+    /// <summary>
+    /// File names that make up the app's data in a folder: settings.json, then day notes, then
+    /// App Track usage files.
+    /// </summary>
     public static IReadOnlyList<string> DataFiles(string folder)
     {
         var names = new List<string>();
         if (!Directory.Exists(folder)) return names;
         if (HasData(folder)) names.Add(SettingsFileName);
-        names.AddRange(Directory.GetFiles(folder, DayNotesPattern)
-            .Select(Path.GetFileName)
-            .OfType<string>()
-            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
+        names.AddRange(Matching(folder, DayNotesPattern, ".txt"));
+        names.AddRange(Matching(folder, AppUsagePattern, ".json"));
         return names;
     }
+
+    // Windows wildcards can also match longer extensions, so the extension is checked again.
+    private static IEnumerable<string> Matching(string folder, string pattern, string extension) =>
+        Directory.GetFiles(folder, pattern)
+            .Select(Path.GetFileName)
+            .OfType<string>()
+            .Where(n => n.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase);
 
     public static string BackupName(string fileName, DateTime nowLocal) =>
         $"{fileName}.bak-{nowLocal:yyyyMMddHHmmss}";

@@ -90,6 +90,10 @@ try
     File.WriteAllText(Path.Combine(current, "settings.json"), "{ \"current\": true }");
     File.WriteAllText(Path.Combine(current, "day-notes-20261118.txt"), "notes 18");
     File.WriteAllText(Path.Combine(current, "day-notes-20261119.txt"), "notes 19");
+    File.WriteAllText(Path.Combine(current, "app-usage-2026-11-18.json"), "{ \"usage\": 18 }");
+    File.WriteAllText(Path.Combine(current, "app-usage-2026-11-19.json"), "{ \"usage\": 19 }");
+    File.WriteAllText(Path.Combine(current, "app-usage-2026-11-19.json.tmp"), "half written");
+    File.WriteAllText(Path.Combine(current, "app-usage-2026-11-17.json.unreadable-20261118090000"), "set aside");
     File.WriteAllText(Path.Combine(current, "crash.log"), "boom");
     File.WriteAllText(Path.Combine(current, "datafolder.json"), "{}");
     File.WriteAllText(Path.Combine(used, "settings.json"), "{ \"used\": true }");
@@ -101,8 +105,9 @@ try
     Check(DataFolder.Plan(current, used) == DataFolder.ChangeKind.TargetHasData, "existing data in the target is detected");
 
     var files = DataFolder.DataFiles(current);
-    Check(files.SequenceEqual(["settings.json", "day-notes-20261118.txt", "day-notes-20261119.txt"]),
-        "data files are settings.json and day notes only: " + string.Join(", ", files));
+    Check(files.SequenceEqual(["settings.json", "day-notes-20261118.txt", "day-notes-20261119.txt",
+            "app-usage-2026-11-18.json", "app-usage-2026-11-19.json"]),
+        "data files are settings.json, day notes and app usage only: " + string.Join(", ", files));
     Check(DataFolder.DataFiles(missing).Count == 0, "a missing folder has no data files");
 
     // Backup name.
@@ -111,11 +116,15 @@ try
 
     // Copy to an empty folder.
     var copied = DataFolder.CopyData(current, empty, stamp);
-    Check(copied.Count == 3, "three files copied");
+    Check(copied.Count == 5, "five files copied");
     Check(File.ReadAllText(Path.Combine(empty, "settings.json")) == "{ \"current\": true }", "settings.json copied");
     Check(File.ReadAllText(Path.Combine(empty, "day-notes-20261119.txt")) == "notes 19", "day notes copied");
+    Check(File.ReadAllText(Path.Combine(empty, "app-usage-2026-11-18.json")) == "{ \"usage\": 18 }", "app usage copied");
     Check(!File.Exists(Path.Combine(empty, "crash.log")) && !File.Exists(Path.Combine(empty, "datafolder.json")),
         "crash log and pointer are not copied");
+    Check(!File.Exists(Path.Combine(empty, "app-usage-2026-11-19.json.tmp")) &&
+          Directory.GetFiles(empty, "*.unreadable-*").Length == 0,
+        "half-written and set-aside app usage files are not copied");
     Check(File.Exists(Path.Combine(current, "settings.json")) && File.Exists(Path.Combine(current, "day-notes-20261118.txt")),
         "originals are left in place");
 
@@ -127,6 +136,19 @@ try
         "replace backs up the target's settings.json");
     Check(File.ReadAllText(Path.Combine(used, "day-notes-20260101.txt")) == "only in target",
         "notes only in the target are kept");
+
+    // Replace also backs up an app usage file it overwrites and keeps days only in the target.
+    File.WriteAllText(Path.Combine(used, "app-usage-2026-11-19.json"), "{ \"target\": 19 }");
+    File.WriteAllText(Path.Combine(used, "app-usage-2026-01-01.json"), "{ \"target\": 1 }");
+    var later = stamp.AddMinutes(1);
+    DataFolder.CopyData(current, used, later);
+    Check(File.ReadAllText(Path.Combine(used, "app-usage-2026-11-19.json")) == "{ \"usage\": 19 }",
+        "replace overwrites the day's app usage");
+    Check(File.ReadAllText(Path.Combine(used, DataFolder.BackupName("app-usage-2026-11-19.json", later))) == "{ \"target\": 19 }",
+        "replace backs up the target's app usage file");
+    Check(File.ReadAllText(Path.Combine(used, "app-usage-2026-01-01.json")) == "{ \"target\": 1 }",
+        "app usage days only in the target are kept");
+    Check(!DataFolder.DataFiles(used).Any(n => n.Contains(".bak-")), "backups are not data files");
 
     // The store follows a folder switch.
     var store = new SettingsStore(current);
