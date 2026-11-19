@@ -8,10 +8,6 @@
     <RootNamespace>TimesheetBuddy.PresenceChecks</RootNamespace>
   </PropertyGroup>
 
-  <ItemGroup>
-    <Compile Include="..\..\Services\Presence.cs" Link="Presence.cs" />
-  </ItemGroup>
-
   <Import Project="..\DataLayer.props" />
 
 </Project>

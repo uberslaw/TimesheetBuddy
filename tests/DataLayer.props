@@ -13,6 +13,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)..\Services\LegacyData.cs" Link="Data\LegacyData.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)..\Services\TicketRules.cs" Link="Data\TicketRules.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)..\Services\ClientIdentity.cs" Link="Data\ClientIdentity.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)..\Services\Presence.cs" Link="Data\Presence.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)..\Services\ChangeJournal.cs" Link="Data\ChangeJournal.cs" />
   </ItemGroup>
 </Project>
