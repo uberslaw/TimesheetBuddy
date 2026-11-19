@@ -43,6 +43,7 @@ public partial class MainWindow : Window
         DayCodeTotalsList.ItemsSource = _dayCodeRows;
         _lockWatcher = new ScreenLockWatcher(_state);
         _lockWatcher.UnlockPrompt += OnScreenUnlocked;
+        _lockWatcher.LockChanged += locked => App.AppTracker.SetLocked(locked);
         _uiTimer.Tick += (_, _) => RefreshTimer();
         _state.PropertyChanged += StateOnPropertyChanged;
         _state.SettingsChanged += (_, _) =>
@@ -1096,6 +1097,18 @@ public partial class MainWindow : Window
     {
         var menu = new ContextMenu();
 
+        var appTrack = new MenuItem
+        {
+            Header = "App Track",
+            IsCheckable = true,
+            IsChecked = _state.Settings.AppTrackEnabled,
+            ToolTip = "Log time per program (program name only; never window titles, web pages or email)"
+        };
+        appTrack.Click += (_, _) => App.SetAppTrack(appTrack.IsChecked);
+        menu.Items.Add(appTrack);
+
+        menu.Items.Add(new Separator());
+
         var dayLog = new MenuItem { Header = "Day log…" };
         dayLog.Click += (_, _) => OpenDayLog();
         menu.Items.Add(dayLog);
@@ -1486,6 +1499,7 @@ public partial class MainWindow : Window
         // resumes on the next launch.
         _state.StopAllForShutdown();
         _scheduler.OnSessionChanged();
+        App.AppTracker.Stop();
 
         SavePlacement();
         _state.Persist();

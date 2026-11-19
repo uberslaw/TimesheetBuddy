@@ -18,6 +18,9 @@ public sealed class ScreenLockWatcher : IDisposable
 
     public event Action<LockIntervalSplit.Snapshot, DateTime, TimeSpan>? UnlockPrompt;
 
+    /// <summary>True on session lock, false on unlock (on the UI thread).</summary>
+    public event Action<bool>? LockChanged;
+
     public void Start()
     {
         if (_hooked) return;
@@ -56,11 +59,14 @@ public sealed class ScreenLockWatcher : IDisposable
         if (reason == SessionSwitchReason.SessionLock)
         {
             _tracker.NoteLock(_state.ActiveSession, now);
+            LockChanged?.Invoke(true);
             return;
         }
 
         if (reason != SessionSwitchReason.SessionUnlock)
             return;
+
+        LockChanged?.Invoke(false);
 
         if (!_tracker.TryTakeUnlock(_state.ActiveSession, now, out var snapshot, out var lockedFor))
             return;

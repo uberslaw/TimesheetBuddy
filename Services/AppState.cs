@@ -955,6 +955,15 @@ public sealed class AppState : INotifyPropertyChanged
         SettingsChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    public void SetAppTrackEnabled(bool enabled)
+    {
+        if (_settings.AppTrackEnabled == enabled)
+            return;
+        _settings.AppTrackEnabled = enabled;
+        Persist();
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     /// <summary>
     /// The task type the widget's Start resumes: the most recently started entry today, else the
     /// most recent on any day. Deleted entries and Break are skipped.

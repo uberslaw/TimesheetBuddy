@@ -35,6 +35,7 @@ public partial class SettingsWindow : Window
         WidgetOtherMonitorCheck.IsChecked = state.Settings.ShowTimerWidgetOnOtherMonitor;
         RecheckEnabledCheck.IsChecked = state.Settings.RecheckPromptEnabled;
         FifteenEnabledCheck.IsChecked = state.Settings.FifteenMinutePromptEnabled;
+        AppTrackCheck.IsChecked = state.Settings.AppTrackEnabled;
 
         for (var h = 0; h <= 8; h++) RecheckHours.Items.Add(h);
         for (var m = 0; m < 60; m += 5) RecheckMinutes.Items.Add(m);
@@ -117,7 +118,7 @@ public partial class SettingsWindow : Window
             case DataFolder.ChangeKind.CopyToEmpty:
                 if (MessageBox.Show(this,
                         "Move your Timesheet Buddy data to:\n" + target +
-                        "\n\nYour settings, time entries and day notes are copied there now and used from now on. " +
+                        "\n\nYour settings, time entries, day notes and App Track usage are copied there now and used from now on. " +
                         "The copy in\n" + current + "\nis left in place as a backup.",
                         "Data folder",
                         MessageBoxButton.OKCancel,
@@ -170,6 +171,7 @@ public partial class SettingsWindow : Window
         try
         {
             App.State.Persist();
+            App.AppTracker.Flush();
             DataFolder.CopyData(current, target, nowLocal ?? DateTime.Now);
             App.Store.SwitchFolder(target);
             App.State.Persist();
@@ -286,6 +288,8 @@ public partial class SettingsWindow : Window
             WidgetDisableRadio.IsChecked != true,
             WidgetCoveredCheck.IsChecked == true,
             WidgetOtherMonitorCheck.IsChecked == true);
+        if ((AppTrackCheck.IsChecked == true) != App.State.Settings.AppTrackEnabled)
+            App.SetAppTrack(AppTrackCheck.IsChecked == true);
 
         DialogResult = true;
         Close();

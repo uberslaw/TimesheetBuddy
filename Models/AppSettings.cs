@@ -16,6 +16,10 @@ public sealed class AppSettings
     public bool ShowTimerWidgetOnOtherMonitor { get; set; } = true;
     public double? WidgetLeft { get; set; }
     public double? WidgetTop { get; set; }
+
+    /// <summary>App Track: log time per foreground program (name only) to app-usage-*.json. Off by default.</summary>
+    public bool AppTrackEnabled { get; set; }
+
     public List<JobCode> JobCodes { get; set; } = [];
     public List<FavoriteTask> FavoriteTasks { get; set; } = [];
     public List<string> Categories { get; set; } =

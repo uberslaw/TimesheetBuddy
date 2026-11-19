@@ -103,6 +103,11 @@
                                    VerticalAlignment="Center" Margin="8,0,0,0"
                                    Foreground="{StaticResource MutedBrush}"/>
                     </StackPanel>
+
+                    <TextBlock FontWeight="SemiBold" Text="App Track" Margin="0,16,0,6"/>
+                    <CheckBox x:Name="AppTrackCheck" Content="Log time per program I use (App Track)" Margin="0,0,0,4"/>
+                    <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}"
+                               Text="Records only the program name, never window titles, web pages, documents or email. Pauses after 5 minutes without input and while the screen is locked. See Menu → App usage…."/>
                 </StackPanel>
             </TabItem>
 
@@ -146,7 +151,7 @@
                                 Click="UseDefaultFolder_Click"/>
                     </StackPanel>
                     <TextBlock TextWrapping="Wrap" Margin="0,10,0,0" Foreground="{StaticResource MutedBrush}"
-                               Text="Your time entries, settings and day notes are stored here."/>
+                               Text="Your time entries, settings, day notes and App Track usage are stored here."/>
                     <TextBlock TextWrapping="Wrap" Margin="0,4,0,0" Foreground="{StaticResource MutedBrush}"
                                Text="Changing the folder happens straight away, when you confirm it, not when you press Save, and Cancel does not undo it. Your data is copied to the new folder; the old copy is left in place as a backup."/>
                     <TextBlock x:Name="CrashLogNote" TextWrapping="Wrap" Margin="0,4,0,0"

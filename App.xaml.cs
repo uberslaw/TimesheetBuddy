@@ -11,6 +11,7 @@ public partial class App : Application
     public static AppState State { get; private set; } = null!;
     public static PromptScheduler Scheduler { get; private set; } = null!;
     public static SettingsStore Store { get; private set; } = null!;
+    public static AppTracker AppTracker { get; private set; } = null!;
 
     /// <summary>Always in the default folder so it works when a custom data folder is unavailable.</summary>
     public static string CrashLogPath { get; } = Path.Combine(DataFolder.DefaultFolder, "crash.log");
@@ -42,6 +43,9 @@ public partial class App : Application
             State = new AppState(Store);
             Scheduler = new PromptScheduler(State);
             State.RestoreSessionIfAny();
+            AppTracker = new AppTracker(() => Store.Folder);
+            if (State.Settings.AppTrackEnabled)
+                AppTracker.Start();
 
             var window = new MainWindow();
             MainWindow = window;
@@ -85,7 +89,23 @@ public partial class App : Application
             Shutdown(1);
     }
 
+    protected override void OnExit(ExitEventArgs e)
+    {
+        AppTracker?.Stop();
+        base.OnExit(e);
+    }
+
     internal static void ClearUnavailableDataFolder() => UnavailableDataFolder = null;
+
+    /// <summary>Turns App Track on or off now and saves the choice.</summary>
+    internal static void SetAppTrack(bool enabled)
+    {
+        State.SetAppTrackEnabled(enabled);
+        if (enabled)
+            AppTracker.Start();
+        else
+            AppTracker.Stop();
+    }
 
     /// <summary>Starts a fresh copy of the app, then closes this one (the main window saves on close).</summary>
     internal static void Restart()
