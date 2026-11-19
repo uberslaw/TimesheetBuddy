@@ -56,6 +56,8 @@ public partial class App : Application
             var window = new MainWindow();
             MainWindow = window;
             window.Show();
+            window.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle,
+                () => StartPresence(() => window.IsScreenLocked));
 
             if (UnavailableDataFolder is not null)
                 window.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
@@ -97,7 +99,9 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        AppTracker?.Stop();
+        if (!ClosingWithoutSave)
+            AppTracker?.Stop();
+        Presence?.Stop(deleteFile: true);
         base.OnExit(e);
     }
 

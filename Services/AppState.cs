@@ -1115,8 +1115,31 @@ public sealed class AppState : INotifyPropertyChanged
         return report;
     }
 
-    /// <summary>Picks up changes another PC saved to settings.json (merge, then save). True when it saved.</summary>
-    public bool SyncFromDisk() => _store.SaveIfChangedOnDisk(_settings);
+    /// <summary>Picks up changes another PC saved to settings.json, in memory only (see <see cref="SettingsStore.Pull"/>).</summary>
+    public SettingsMerge.Report? SyncFromDisk() => _store.Pull(_settings);
+
+    /// <summary>Keep selected (after Yes on the overlap prompt): adds the chosen items from the other PC and saves.</summary>
+    public IReadOnlyList<TimeEntry> KeepFromOtherPc(IReadOnlyList<OverlapMerge.Item> items, IReadOnlySet<Guid> selected,
+        string machine)
+    {
+        var added = OverlapMerge.Keep(_settings, items, selected);
+        var offered = items.Count(i => !i.AlreadyHere);
+        if (added.Count > 0)
+        {
+            RefreshToday();
+            Persist();
+        }
+
+        Log(ChangeJournal.Actions.Overlap, added.Count == 0
+            ? $"Discarded {offered} item(s) from {machine}"
+            : $"Kept {added.Count} of {offered} item(s) from {machine}: " +
+              string.Join("; ", added.Select(e => $"{ChangeJournal.Describe(e.TaskName, e.JobCodeText, e.Ticket)} {ChangeJournal.FormatDuration(e.Duration)}")));
+        foreach (var e in added)
+            Journal?.Append(ChangeJournal.Actions.Add, $"From {machine}: {ChangeJournal.Describe(e.TaskName, e.JobCodeText, e.Ticket)}", e.Id);
+        return added;
+    }
+
+    public void LogOverlap(string summary) => Journal?.Append(ChangeJournal.Actions.Overlap, summary);
 
     private void ReloadFromSettings()
     {

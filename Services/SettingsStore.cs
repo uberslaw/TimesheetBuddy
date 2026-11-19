@@ -159,28 +159,42 @@ public sealed class SettingsStore
     }
 
     /// <summary>
-    /// Merges and saves when settings.json changed on disk since this process last read or wrote it
-    /// (for example when the window is activated after working on another PC). True when it saved.
+    /// Brings changes another PC saved to settings.json into <paramref name="settings"/> in memory, without
+    /// writing (so two open PCs never answer each other's saves). The file read becomes the new baseline; the
+    /// next save writes the merged result. Null when the file has not changed since this process last read or
+    /// wrote it, or can't be read right now.
     /// </summary>
-    public bool SaveIfChangedOnDisk(AppSettings settings)
+    public SettingsMerge.Report? Pull(AppSettings settings)
     {
-        if (_suspended || !File.Exists(_path) || _stamp == StampOf(_path)) return false;
+        if (_suspended || !File.Exists(_path) || _stamp == StampOf(_path)) return null;
 
+        string text;
         try
         {
-            if (IoRetry.ReadAllText(_path) == _baselineJson)
-            {
-                _stamp = StampOf(_path);
-                return false;
-            }
+            text = IoRetry.ReadAllText(_path);
         }
         catch
         {
-            return false;
+            return null;
         }
 
-        Save(settings);
-        return true;
+        var stamp = StampOf(_path);
+        if (text == _baselineJson)
+        {
+            _stamp = stamp;
+            return null;
+        }
+
+        var theirs = Parse(text);
+        if (theirs is null) return null;
+
+        var baseline = _baselineJson is null ? null : Parse(_baselineJson);
+        var report = SettingsMerge.Concurrent(settings, theirs, baseline, Clock().ToUniversalTime());
+        Adopt(text, settings);
+        _stamp = stamp;
+        LastMerge = report;
+        if (report.Changed) ExternalChangesMerged?.Invoke(report);
+        return report;
     }
 
     /// <summary>
