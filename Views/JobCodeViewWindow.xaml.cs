@@ -80,11 +80,11 @@ public partial class JobCodeViewWindow : Window
 
         foreach (var row in _rows)
         {
-            row.DurationText = DayTotals.FormatClock(DayTotals.ForJobCode(today, row.Id, now));
+            row.DurationText = DayTotals.FormatCompact(DayTotals.ForJobCode(today, row.Id, now));
             row.IsActive = activeId == row.Id;
         }
 
-        TodayTotalText.Text = DayTotals.FormatClock(DayTotals.ForDay(today, now));
+        TodayTotalText.Text = DayTotals.FormatCompact(DayTotals.ForDay(today, now));
         StopButton.IsEnabled = _state.ActiveSession is not null;
     }
 
@@ -186,7 +186,7 @@ public sealed class JobCodeRowModel : INotifyPropertyChanged
     public required string Code { get; init; }
     public required string Description { get; init; }
 
-    private string _durationText = "00:00:00";
+    private string _durationText = "0";
     public string DurationText
     {
         get => _durationText;

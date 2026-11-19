@@ -26,7 +26,7 @@ public partial class AssignAndDeleteWindow : Window
 
         IntroText.Text =
             $"Assign time from “{source.TaskName}” ({source.Category} · {JobCode.FormatLabelFromStored(source.JobCodeText)}) " +
-            $"— {source.SegmentCount} portion{(source.SegmentCount == 1 ? "" : "s")}, {DayTotals.FormatClock(source.Total)} total.";
+            $"— {source.SegmentCount} portion{(source.SegmentCount == 1 ? "" : "s")}, {DayTotals.FormatCompact(source.Total)} total.";
 
         var options = otherTasks
             .Where(t => t.Key != source.Key)
@@ -168,7 +168,7 @@ public partial class AssignAndDeleteWindow : Window
             WhenDisplay = segment.IsRunning
                 ? $"{startLocal:HH:mm}–…"
                 : $"{startLocal:HH:mm}–{endLocal:HH:mm}";
-            DurationDisplay = DayTotals.FormatClock(segment.Duration);
+            DurationDisplay = DayTotals.FormatCompact(segment.Duration);
         }
 
         public Guid EntryId { get; }

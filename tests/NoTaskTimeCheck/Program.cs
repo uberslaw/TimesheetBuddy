@@ -34,7 +34,7 @@ try
     Check(state.NoTaskStartedUtc == first.EndUtc, "No Task Selected starts when the task ended");
     Check(state.StatusText == NoTaskTime.Label, "status reads No Task Selected");
     state.Tick();
-    Check(state.ElapsedDisplay == "00:00:00", "counter shows the idle elapsed time");
+    Check(state.ElapsedDisplay == "0", "counter shows the idle elapsed time");
 
     // Start under a minute later: idle ends and is dropped.
     state.StartOrSwitch("Feature work", "Development", null, "DEV");

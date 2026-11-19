@@ -162,7 +162,7 @@
                                        HorizontalAlignment="Right"
                                        TextAlignment="Right"
                                        VerticalAlignment="Center"
-                                       Text="00:00:00"/>
+                                       Text="0"/>
                         </Grid>
                         <Grid Margin="0,4,0,0">
                             <Grid.ColumnDefinitions>
@@ -186,7 +186,7 @@
                                        HorizontalAlignment="Right"
                                        TextAlignment="Right"
                                        VerticalAlignment="Center"
-                                       Text="00:00:00"/>
+                                       Text="0"/>
                         </Grid>
                         <Grid Margin="0,2,0,0">
                             <Grid.ColumnDefinitions>
@@ -210,7 +210,7 @@
                                        HorizontalAlignment="Right"
                                        TextAlignment="Right"
                                        VerticalAlignment="Center"
-                                       Text="07:30"/>
+                                       Text="7:30:00"/>
                         </Grid>
                     </StackPanel>
                     <TextBlock Grid.Column="1" x:Name="TimerText"
@@ -218,9 +218,11 @@
                                FontSize="22" FontWeight="Bold"
                                Foreground="{StaticResource ActiveTimerBrush}"
                                HorizontalAlignment="Right"
+                               TextAlignment="Right"
+                               MinWidth="96"
                                VerticalAlignment="Center"
                                Margin="16,0,0,0"
-                               Text="00:00:00"/>
+                               Text="0"/>
                 </Grid>
             </Border>
 

@@ -32,7 +32,7 @@
                     <TextBlock Foreground="{StaticResource MutedBrush}" FontSize="11" Text="Today"/>
                     <TextBlock x:Name="TodayTotalText" FontFamily="Consolas, Cascadia Mono, Courier New"
                                FontSize="18" FontWeight="Bold" Foreground="{StaticResource TimerBrush}"
-                               Text="00:00:00"/>
+                               Text="0"/>
                     <TextBlock Foreground="{StaticResource MutedBrush}" FontSize="11"
                                Text="All time logged today"/>
                 </StackPanel>
@@ -101,7 +101,8 @@
                                     </StackPanel>
                                     <TextBlock Grid.Column="1" Text="{Binding DurationText}"
                                                FontFamily="Consolas, Cascadia Mono, Courier New"
-                                               FontWeight="SemiBold" VerticalAlignment="Center" Margin="12,0">
+                                               FontWeight="SemiBold" VerticalAlignment="Center" Margin="12,0"
+                                               MinWidth="64" TextAlignment="Right">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
                                                 <Setter Property="Foreground" Value="{StaticResource TimerBrush}"/>

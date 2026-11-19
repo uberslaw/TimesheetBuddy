@@ -227,19 +227,19 @@ public partial class MainWindow : Window
         var noTask = _state.NoTaskTotalForDay(day, now);
         var showNoTask = noTask > TimeSpan.Zero || (!_state.IsHistoryMode && _state.IsNoTaskRunning);
         NoTaskRow.Visibility = showNoTask ? Visibility.Visible : Visibility.Collapsed;
-        NoTaskTotalText.Text = DayTotals.FormatClock(noTask);
+        NoTaskTotalText.Text = DayTotals.FormatCompact(noTask);
 
         _dayCodeRows.Clear();
         var grand = TimeSpan.Zero;
         foreach (var row in rows)
         {
             grand += row.Total;
-            _dayCodeRows.Add(new DayCodeTotalRowModel(row.Label, DayTotals.FormatClock(row.Total)));
+            _dayCodeRows.Add(new DayCodeTotalRowModel(row.Label, DayTotals.FormatCompact(row.Total)));
         }
 
         DayCodeEmptyText.Visibility = rows.Count == 0 && !showNoTask ? Visibility.Visible : Visibility.Collapsed;
-        DayGrandTotalText.Text = DayTotals.FormatClock(grand);
-        DayRemainingText.Text = DayTotals.FormatClockHm(DayTotals.TimeRemaining(grand));
+        DayGrandTotalText.Text = DayTotals.FormatCompact(grand);
+        DayRemainingText.Text = DayTotals.FormatCompact(DayTotals.TimeRemaining(grand));
         DayTotalsPanel.ToolTip = _state.IsHistoryMode
             ? $"Time accounted for {_state.ViewingDate:d MMM yyyy} by job code (most to least). Remaining is 7.5h minus logged."
             : "Time accounted for today by job code (most to least). Remaining is 7.5h minus logged.";
@@ -335,7 +335,7 @@ public partial class MainWindow : Window
                 return;
             }
 
-            row.TotalText = DayTotals.FormatClock(current.Total);
+            row.TotalText = DayTotals.FormatCompact(current.Total);
             row.SegmentCount = current.SegmentCount;
             row.IsActive = row.Key == activeKey;
             if (row.IsExpanded || row.IsActive)
@@ -1368,7 +1368,7 @@ public sealed class TaskTypeRowModel : INotifyPropertyChanged
             {
                 EntryId = segment.EntryId,
                 TimeOfDay = segment.StartUtc.ToLocalTime().ToString("HH:mm"),
-                DurationDisplay = DayTotals.FormatClock(segment.Duration),
+                DurationDisplay = DayTotals.FormatCompact(segment.Duration),
                 IsRunning = segment.IsRunning
             });
         }
@@ -1376,7 +1376,7 @@ public sealed class TaskTypeRowModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(ChildrenVisibility));
     }
 
-    private string _totalText = "00:00:00";
+    private string _totalText = "0";
     public string TotalText
     {
         get => _totalText;

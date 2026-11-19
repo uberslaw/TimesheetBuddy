@@ -116,14 +116,7 @@ public sealed class AppState : INotifyPropertyChanged
         }
     }
 
-    public string ElapsedDisplay
-    {
-        get
-        {
-            var e = Elapsed;
-            return $"{(int)e.TotalHours:00}:{e.Minutes:00}:{e.Seconds:00}";
-        }
-    }
+    public string ElapsedDisplay => DayTotals.FormatCompact(Elapsed);
 
     public string StatusText
     {

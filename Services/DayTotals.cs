@@ -102,6 +102,26 @@ public static class DayTotals
         return $"{(int)duration.TotalHours:00}:{duration.Minutes:00}:{duration.Seconds:00}";
     }
 
+    /// <summary>
+    /// The on-screen counter format: <c>H:MM:SS</c>, <c>M:SS</c>, or bare seconds, with no leading
+    /// zero on the first part and no zero hours or minutes. Seconds always show; hours are total
+    /// hours, so a span over a day reads <c>26:10:00</c>. Negative spans keep a leading minus.
+    /// </summary>
+    public static string FormatCompact(TimeSpan duration)
+    {
+        var sign = duration < TimeSpan.Zero ? "-" : string.Empty;
+        var ticks = duration.Ticks == long.MinValue ? long.MaxValue : Math.Abs(duration.Ticks);
+        var totalSeconds = ticks / TimeSpan.TicksPerSecond;
+        var hours = totalSeconds / 3600;
+        var minutes = totalSeconds / 60 % 60;
+        var seconds = totalSeconds % 60;
+        if (hours > 0)
+            return $"{sign}{hours}:{minutes:00}:{seconds:00}";
+        if (minutes > 0)
+            return $"{sign}{minutes}:{seconds:00}";
+        return totalSeconds == 0 ? "0" : $"{sign}{seconds}";
+    }
+
     /// <summary>Hours and minutes only (for remaining-time display).</summary>
     public static string FormatClockHm(TimeSpan duration)
     {

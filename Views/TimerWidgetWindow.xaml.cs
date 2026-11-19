@@ -106,7 +106,7 @@ public partial class TimerWidgetWindow : Window
         var session = history ? null : _state.ActiveSession;
         var running = session is not null;
         var noTask = !history && _state.IsNoTaskRunning;
-        ElapsedText.Text = running || noTask ? _state.ElapsedDisplay : "00:00:00";
+        ElapsedText.Text = running || noTask ? _state.ElapsedDisplay : DayTotals.FormatCompact(TimeSpan.Zero);
         if (!full)
             return;
 

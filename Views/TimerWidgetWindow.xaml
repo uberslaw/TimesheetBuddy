@@ -99,8 +99,9 @@
                                Foreground="{StaticResource ActiveTimerBrush}"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center"
+                               TextAlignment="Center"
                                Margin="6,0"
-                               Text="00:00:00"/>
+                               Text="0"/>
                     <Border x:Name="StopSlot" Grid.Column="2" Background="Transparent" VerticalAlignment="Center"
                             MouseLeftButtonDown="ControlSlot_MouseLeftButtonDown">
                         <Button x:Name="StopButton" Style="{StaticResource CompactButton}"
