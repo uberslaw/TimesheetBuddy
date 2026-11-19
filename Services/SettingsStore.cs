@@ -31,8 +31,6 @@ public sealed class SettingsStore
         AllowTrailingCommas = true
     };
 
-    private static readonly Regex BareNonFinite = new(@"(?<=[:\[,]\s*)-?(NaN|Infinity)(?=\s*[,\]}])", RegexOptions.Compiled);
-
     private string _path;
     private string? _baselineJson;
     private (long Length, DateTime WriteUtc)? _stamp;
@@ -92,15 +90,39 @@ public sealed class SettingsStore
             return CreateDefaults();
         }
 
-        var parsed = Parse(json);
-        if (parsed is null)
+        var result = ParseWithUpgrades(json);
+        if (result.Settings is not { } parsed)
         {
             SetAside(_path);
             return CreateDefaults();
         }
 
+        LastLoad = result;
+        if (result.Release != "current")
+            UpgradeBackup = KeepUpgradeBackup(_path, Clock());
+
         Adopt(json, parsed);
         return parsed;
+    }
+
+    /// <summary>What the last <see cref="Load"/> read: the release that wrote the file and the upgrades applied.</summary>
+    public LegacyData.Result? LastLoad { get; private set; }
+
+    /// <summary>Backup name kept when <see cref="Load"/> read a file from an earlier release, before it is rewritten.</summary>
+    public string? UpgradeBackup { get; private set; }
+
+    private static string? KeepUpgradeBackup(string path, DateTime nowLocal)
+    {
+        try
+        {
+            var name = DataFolder.BackupName(Path.GetFileName(path), nowLocal);
+            File.Copy(path, Path.Combine(Path.GetDirectoryName(path)!, name), overwrite: false);
+            return name;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     public void Save(AppSettings settings)
@@ -113,6 +135,7 @@ public sealed class SettingsStore
         var report = MergeFromDisk(settings, nowUtc);
         DailySnapshots.TakeIfDue(Folder, nowLocal);
 
+        settings.FormatVersion = LegacyData.CurrentFormat;
         var json = JsonSerializer.Serialize(settings, JsonOptions);
         IoRetry.WriteAllTextAtomic(_path, json);
         Adopt(json, settings);
@@ -154,23 +177,29 @@ public sealed class SettingsStore
     /// strings, NaN, comments and trailing commas. A property or list item that can't be read is skipped
     /// instead of failing the whole file. Null when the text is not a JSON object at all.
     /// </summary>
-    public static AppSettings? Parse(string json)
-    {
-        if (string.IsNullOrWhiteSpace(json)) return null;
+    public static AppSettings? Parse(string json) => ParseWithUpgrades(json).Settings;
 
-        AppSettings? result;
+    /// <summary>
+    /// <see cref="Parse"/>, plus which <see cref="LegacyData"/> upgrades were applied and which release
+    /// most likely wrote the text.
+    /// </summary>
+    public static LegacyData.Result ParseWithUpgrades(string json)
+    {
+        var result = LegacyData.Read(json, Deserialize);
+        if (result.Settings is not null) SettingsMerge.Normalize(result.Settings);
+        return result;
+    }
+
+    private static AppSettings? Deserialize(JsonObject root)
+    {
         try
         {
-            result = JsonSerializer.Deserialize<AppSettings>(json, ReadOptions);
+            return root.Deserialize<AppSettings>(ReadOptions);
         }
         catch (Exception ex) when (ex is JsonException or NotSupportedException or InvalidOperationException or FormatException)
         {
-            result = Lenient(json) ?? Lenient(BareNonFinite.Replace(json, "null"));
+            return ReadLenient(typeof(AppSettings), root) as AppSettings;
         }
-
-        if (result is null) return null;
-        SettingsMerge.Normalize(result);
-        return result;
     }
 
     /// <summary>Reads a settings file from anywhere (import); null when missing or unreadable.</summary>
@@ -257,23 +286,6 @@ public sealed class SettingsStore
         catch
         {
             // Nothing more can be done; the save goes ahead.
-        }
-    }
-
-    private static AppSettings? Lenient(string json)
-    {
-        try
-        {
-            var root = JsonNode.Parse(json, documentOptions: new JsonDocumentOptions
-            {
-                CommentHandling = JsonCommentHandling.Skip,
-                AllowTrailingCommas = true
-            });
-            return root is JsonObject obj ? ReadLenient(typeof(AppSettings), obj) as AppSettings : null;
-        }
-        catch (JsonException)
-        {
-            return null;
         }
     }
 

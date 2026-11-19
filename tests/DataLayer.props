@@ -10,5 +10,6 @@
     <Compile Include="$(MSBuildThisFileDirectory)..\Services\DataFolder.cs" Link="Data\DataFolder.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)..\Services\SettingsMerge.cs" Link="Data\SettingsMerge.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)..\Services\SettingsStore.cs" Link="Data\SettingsStore.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)..\Services\LegacyData.cs" Link="Data\LegacyData.cs" />
   </ItemGroup>
 </Project>

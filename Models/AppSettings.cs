@@ -2,6 +2,9 @@ namespace TimesheetBuddy.Models;
 
 public sealed class AppSettings
 {
+    /// <summary>Data format; missing (0) in files from earlier releases. See <c>LegacyData</c>.</summary>
+    public int FormatVersion { get; set; }
+
     public bool AlwaysOnTop { get; set; } = true;
     public int RecheckHours { get; set; }
     public int RecheckMinutes { get; set; } = 30;

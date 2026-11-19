@@ -45,6 +45,12 @@ public static class DataImport
         public AppSettings? Settings { get; init; }
         public string? FilesFolder { get; init; }
         public string? Error { get; init; }
+
+        /// <summary>Release that most likely wrote the settings (see <see cref="LegacyData.Release"/>).</summary>
+        public string? Release { get; init; }
+
+        /// <summary>Upgrades applied while reading an older release's file.</summary>
+        public IReadOnlyList<string> Upgrades { get; init; } = [];
     }
 
     public enum NoteOutcome
@@ -83,13 +89,17 @@ public static class DataImport
                 return new Source { Path = path, Error = "That is the data folder in use. Pick an older copy instead." };
 
             var settingsPath = System.IO.Path.Combine(path, DataFolder.SettingsFileName);
-            var settings = SettingsStore.ReadFile(settingsPath);
-            if (File.Exists(settingsPath) && settings is null)
+            var read = ReadSettings(settingsPath);
+            if (File.Exists(settingsPath) && read?.Settings is null)
                 return new Source { Path = path, Error = "The settings.json in that folder can't be read." };
             var hasFiles = DataFolder.DataFiles(path).Any(n => n != DataFolder.SettingsFileName);
-            if (settings is null && !hasFiles)
+            if (read?.Settings is null && !hasFiles)
                 return new Source { Path = path, Error = "That folder has no Timesheet Buddy data." };
-            return new Source { Path = path, Settings = settings, FilesFolder = path };
+            return new Source
+            {
+                Path = path, Settings = read?.Settings, FilesFolder = path,
+                Release = read?.Release, Upgrades = read?.Upgrades ?? []
+            };
         }
 
         if (!File.Exists(path))
@@ -100,11 +110,27 @@ public static class DataImport
         if (isSettings && DataFolder.SameFolder(folder, currentFolder))
             return new Source { Path = path, Error = "That is the settings file in use. Pick an older copy instead." };
 
-        var parsed = SettingsStore.ReadFile(path);
-        if (parsed is null)
+        var parsed = ReadSettings(path);
+        if (parsed?.Settings is null)
             return new Source { Path = path, Error = "That file isn't a Timesheet Buddy settings file, or it can't be read." };
 
-        return new Source { Path = path, Settings = parsed, FilesFolder = isSettings ? folder : null };
+        return new Source
+        {
+            Path = path, Settings = parsed.Settings, FilesFolder = isSettings ? folder : null,
+            Release = parsed.Release, Upgrades = parsed.Upgrades
+        };
+    }
+
+    private static LegacyData.Result? ReadSettings(string path)
+    {
+        try
+        {
+            return File.Exists(path) ? SettingsStore.ParseWithUpgrades(IoRetry.ReadAllText(path)) : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>What importing would do, computed on copies; nothing is written.</summary>
@@ -352,7 +378,7 @@ public static class DataImport
         }
 
         if (!DataFolder.SameFolder(currentFolder, defaultFolder) && DataFolder.HasData(defaultFolder))
-            list.Add(new Candidate(defaultFolder, "Default data folder (used before the folder was changed)",
+            list.Add(new Candidate(defaultFolder, "Default data folder (where every earlier release kept its data)",
                 CandidateKind.Folder, File.GetLastWriteTime(Path.Combine(defaultFolder, DataFolder.SettingsFileName))));
 
         return list;
