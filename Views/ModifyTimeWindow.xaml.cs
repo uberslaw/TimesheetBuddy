@@ -8,11 +8,14 @@ namespace TimesheetBuddy.Views;
 /// <summary>Right-click → Modify Time…: add to or remove from one Today-by-task row.</summary>
 public partial class ModifyTimeWindow : Window
 {
-    private const int MaxHours = 99;
+    private const int MaxHours = RowTimeEdit.MaxAmountHours;
     private static readonly Regex Digits = new("^[0-9]+$", RegexOptions.Compiled);
     private readonly TimeSpan _removable;
+    private int _addHours;
+    private int _addMinutes = 1;
 
-    public ModifyTimeWindow(string taskName, string codeLabel, TimeSpan currentTotal, TimeSpan removable)
+    public ModifyTimeWindow(string taskName, string codeLabel, TimeSpan currentTotal, TimeSpan removable,
+        bool startWithRemove = false)
     {
         InitializeComponent();
         _removable = removable;
@@ -20,8 +23,9 @@ public partial class ModifyTimeWindow : Window
         CodeLabel.Text = codeLabel;
         TotalRun.Text = DayTotals.FormatCompact(currentTotal);
         RemoveHint.Text = $"Up to {DayTotals.FormatCompact(removable)} of finished time can be removed, newest segments first. A running timer is not changed.";
-        HoursBox.Text = "00";
-        MinutesBox.Text = "01";
+        Hours = _addHours;
+        Minutes = _addMinutes;
+        if (startWithRemove) RemoveRadio.IsChecked = true;
         Loaded += (_, _) =>
         {
             MinutesBox.Focus();
@@ -48,7 +52,21 @@ public partial class ModifyTimeWindow : Window
     private void Mode_Changed(object sender, RoutedEventArgs e)
     {
         if (RemoveHint is null) return;
-        RemoveHint.Visibility = RemoveRadio.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        var remove = RemoveRadio.IsChecked == true;
+        RemoveHint.Visibility = remove ? Visibility.Visible : Visibility.Collapsed;
+        if (remove)
+        {
+            _addHours = Hours;
+            _addMinutes = Minutes;
+            var (hours, minutes) = RowTimeEdit.RemovePrefill(_removable);
+            Hours = hours;
+            Minutes = minutes;
+        }
+        else
+        {
+            Hours = _addHours;
+            Minutes = _addMinutes;
+        }
     }
 
     private void HoursUp_Click(object sender, RoutedEventArgs e) => Hours = Hours + 1;
@@ -102,15 +120,25 @@ public partial class ModifyTimeWindow : Window
     {
         Hours = Hours;
         Minutes = Minutes;
-        var duration = TimeSpan.FromHours(Hours) + TimeSpan.FromMinutes(Minutes);
-        if (duration < TimeSpan.FromMinutes(1))
+        var remove = RemoveRadio.IsChecked == true;
+        if (remove && _removable <= TimeSpan.Zero)
+        {
+            MessageBox.Show(this, RowTimeEdit.OverRemovalMessage(_removable), "Modify time",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var removeAll = remove && RowTimeEdit.IsRemoveAll(_removable, Hours, Minutes);
+        var duration = remove
+            ? RowTimeEdit.ResolveRemoveAmount(_removable, Hours, Minutes)
+            : TimeSpan.FromHours(Hours) + TimeSpan.FromMinutes(Minutes);
+        if (!removeAll && duration < TimeSpan.FromMinutes(1))
         {
             MessageBox.Show(this, "Enter at least 1 minute.", "Modify time",
                 MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
-        var remove = RemoveRadio.IsChecked == true;
         if (remove && duration > _removable)
         {
             MessageBox.Show(this, RowTimeEdit.OverRemovalMessage(_removable), "Modify time",

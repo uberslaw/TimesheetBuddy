@@ -148,6 +148,43 @@ var clock = Local(17, 0);
     Check(yesterday.StartUtc == Local(9, 0, 0, 10), "the same task on another day keeps its time");
 }
 
+// Remove prefill: whole minutes of the removable time; the untouched prefill removes all of it.
+{
+    var removable = TimeSpan.FromSeconds(14 * 60 + 51);
+    Check(RowTimeEdit.RemovePrefill(removable) == (0, 14), "14:51 removable prefills 00 : 14 (seconds dropped)");
+    Check(RowTimeEdit.RemovePrefill(TimeSpan.FromMinutes(125)) == (2, 5), "2 h 5 min prefills 02 : 05");
+    Check(RowTimeEdit.RemovePrefill(TimeSpan.FromSeconds(40)) == (0, 0), "under a minute prefills 00 : 00");
+    Check(RowTimeEdit.RemovePrefill(TimeSpan.Zero) == (0, 0), "nothing removable prefills 00 : 00");
+    Check(RowTimeEdit.RemovePrefill(TimeSpan.FromHours(120)) == (99, 59), "the prefill is capped at the 99 : 59 box limits");
+
+    Check(RowTimeEdit.IsRemoveAll(removable, 0, 14), "the untouched prefill is remove-all");
+    Check(RowTimeEdit.ResolveRemoveAmount(removable, 0, 14) == removable, "remove-all takes the full 14:51, seconds included");
+    Check(!RowTimeEdit.IsRemoveAll(removable, 0, 13) &&
+          RowTimeEdit.ResolveRemoveAmount(removable, 0, 13) == TimeSpan.FromMinutes(13), "an edited amount removes just that amount");
+    Check(RowTimeEdit.ResolveRemoveAmount(removable, 0, 15) == TimeSpan.FromMinutes(15) &&
+          TimeSpan.FromMinutes(15) > removable, "an amount raised past the prefill still goes to the max clamp");
+    Check(RowTimeEdit.ResolveRemoveAmount(TimeSpan.FromSeconds(40), 0, 0) == TimeSpan.FromSeconds(40),
+        "under a minute, the untouched 00 : 00 removes the 40 s");
+    Check(!RowTimeEdit.IsRemoveAll(TimeSpan.Zero, 0, 0) &&
+          RowTimeEdit.ResolveRemoveAmount(TimeSpan.Zero, 0, 0) == TimeSpan.Zero, "nothing removable is never remove-all");
+    Check(RowTimeEdit.ResolveRemoveAmount(TimeSpan.FromHours(120), 99, 59) == TimeSpan.FromHours(120),
+        "the capped 99 : 59 prefill still removes everything");
+
+    var a = Timer("Report", Local(9, 0), Local(9, 10, 30));
+    var b = Timer("Report", Local(11, 0), Local(11, 4, 21));
+    var running = Timer("Report", Local(16, 0), null);
+    var entries = new List<TimeEntry> { a, b, running };
+    var key = TaskTypeSummary.KeyOf(a);
+    var rowRemovable = RowTimeEdit.RemovableTime(RowTimeEdit.RowEntries(entries, day, key), running.Id);
+    Check(rowRemovable == removable, "the row has 14:51 of finished time");
+    var (h, m) = RowTimeEdit.RemovePrefill(rowRemovable);
+    var result = RowTimeEdit.Remove(entries, day, key, running.Id, RowTimeEdit.ResolveRemoveAmount(rowRemovable, h, m));
+    Check(result.Applied && result.Deleted == 2 && entries.Count == 1 && entries.Contains(running),
+        "OK on the untouched prefill deletes every finished segment and keeps the running one");
+    Check(RowTimeEdit.RemovableTime(RowTimeEdit.RowEntries(entries, day, key), running.Id) == TimeSpan.Zero,
+        "the row's finished time is exactly 0");
+}
+
 // Move Time: every entry of the row on the day moves; other days stay.
 var mtg = Guid.NewGuid();
 const string MtgText = "MTG — Meetings";

@@ -42,6 +42,33 @@ public static class RowTimeEdit
         return total;
     }
 
+    public const int MaxAmountHours = 99;
+
+    /// <summary>
+    /// The hours : minutes the Remove amount starts at: the removable time in whole minutes
+    /// (seconds dropped), capped at 99:59 to fit the boxes. Under a minute gives 0:00.
+    /// </summary>
+    public static (int Hours, int Minutes) RemovePrefill(TimeSpan removable)
+    {
+        if (removable <= TimeSpan.Zero) return (0, 0);
+        var wholeMinutes = (long)Math.Floor(removable.TotalMinutes);
+        if (wholeMinutes >= (MaxAmountHours + 1) * 60L) return (MaxAmountHours, 59);
+        return ((int)(wholeMinutes / 60), (int)(wholeMinutes % 60));
+    }
+
+    /// <summary>
+    /// True when the entered amount is still the untouched prefill, which means "remove all of it":
+    /// the full removable time, seconds included, rather than the whole minutes shown.
+    /// </summary>
+    public static bool IsRemoveAll(TimeSpan removable, int hours, int minutes) =>
+        removable > TimeSpan.Zero && RemovePrefill(removable) == (hours, minutes);
+
+    /// <summary>The time Remove takes for an entered amount: the full removable time for the untouched prefill.</summary>
+    public static TimeSpan ResolveRemoveAmount(TimeSpan removable, int hours, int minutes) =>
+        IsRemoveAll(removable, hours, minutes)
+            ? removable
+            : TimeSpan.FromHours(hours) + TimeSpan.FromMinutes(minutes);
+
     /// <summary>
     /// Takes <paramref name="amount"/> off the row's finished segments, most recent first. A timer
     /// segment is shortened by moving its start later; a manual one loses minutes from
