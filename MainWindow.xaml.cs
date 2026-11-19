@@ -32,6 +32,7 @@ public partial class MainWindow : Window
     private bool _jobCodeLockedFromList;
     private bool _fillingEditors;
     private string? _editingRowKey;
+    private string? _lastTicketPrefix;
     private bool _positionDirty;
     private bool _closing;
 
@@ -145,8 +146,8 @@ public partial class MainWindow : Window
             ? $"Nothing logged on {_state.ViewingDate:d MMM yyyy} yet"
             : "Nothing logged today yet";
 
-        StartButton.IsEnabled = !history;
-        StartButton.Opacity = history ? 0.4 : 1;
+        AddButton.IsEnabled = !history;
+        AddButton.Opacity = history ? 0.4 : 1;
         StopButton.IsEnabled = !history;
         StopButton.Opacity = history ? 0.4 : 1;
         TimerPanel.Opacity = history ? 0.45 : 1;
@@ -157,7 +158,7 @@ public partial class MainWindow : Window
 
     private void ApplyJobCodeEditability()
     {
-        // List selection locks the job code; new tasks (Start) can pick freely.
+        // List selection locks the job code; new tasks (Add) can pick freely.
         JobCodeCombo.IsEnabled = !_state.IsHistoryMode && !_jobCodeLockedFromList;
         JobCodeCombo.Opacity = JobCodeCombo.IsEnabled ? 1 : 0.7;
     }
@@ -323,9 +324,7 @@ public partial class MainWindow : Window
     {
         var byKey = summary.ToDictionary(r => r.Key);
         var session = _state.IsHistoryMode ? null : _state.ActiveSession;
-        var activeKey = session is null
-            ? null
-            : TaskTypeSummary.KeyOf(session.TaskName, session.Category, session.JobCodeId, session.JobCodeText);
+        var activeKey = session is null ? null : TaskTypeSummary.KeyOf(session);
 
         foreach (var row in _taskRows)
         {
@@ -379,8 +378,7 @@ public partial class MainWindow : Window
 
         var session = _state.ActiveSession;
         var alreadyActive = row.IsActive ||
-            (session is not null &&
-             TaskTypeSummary.KeyOf(session.TaskName, session.Category, session.JobCodeId, session.JobCodeText) == row.Key);
+            (session is not null && TaskTypeSummary.KeyOf(session) == row.Key);
         if (alreadyActive)
             return;
 
@@ -393,6 +391,7 @@ public partial class MainWindow : Window
         _editingRowKey = row.Key;
         TaskNameCombo.Text = row.TaskName;
         CategoryCombo.Text = row.Category;
+        SetTicketText(row.Ticket);
 
         var code = _state.FindJobCode(row.JobCodeId);
         if (code is not null)
@@ -464,7 +463,7 @@ public partial class MainWindow : Window
     private void ContinueTaskType(TaskTypeRowModel row)
     {
         var code = _state.FindJobCode(row.JobCodeId);
-        _state.StartOrSwitch(row.TaskName, row.Category, row.JobCodeId, code?.Display ?? row.JobCodeText);
+        _state.StartOrSwitch(row.TaskName, row.Category, row.JobCodeId, code?.Display ?? row.JobCodeText, row.Ticket);
         _scheduler.OnSessionChanged();
         BindStatus();
         FillEditorsFromRow(row);
@@ -485,7 +484,8 @@ public partial class MainWindow : Window
             row.Category,
             row.JobCodeId,
             code?.Display ?? row.JobCodeText,
-            duration);
+            duration,
+            row.Ticket);
 
         row.IsExpanded = true;
         _expandedKeys.Add(row.Key);
@@ -835,10 +835,10 @@ public partial class MainWindow : Window
             _state.Settings.FifteenMinuteIntervalMinutes);
     }
 
-    private void Start_Click(object sender, RoutedEventArgs e)
+    private void Add_Click(object sender, RoutedEventArgs e)
     {
         if (_state.IsHistoryMode) return;
-        TryStartFromInputs();
+        TryAddFromInputs();
     }
 
     private void Stop_Click(object sender, RoutedEventArgs e) => StopFromUser();
@@ -868,20 +868,94 @@ public partial class MainWindow : Window
             return;
         }
 
-        TryStartFromInputs();
+        TryAddFromInputs();
     }
 
-    private void TryStartFromInputs()
+    private void TicketBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        e.Handled = true;
+        if (_state.IsHistoryMode) return;
+        TryAddFromInputs();
+    }
+
+    /// <summary>
+    /// Fills job code 03 and category Support when the ticket first reads as RITM/INC (or switches
+    /// between them). Later edits to the selectors are left alone, and clearing the ticket reverts nothing.
+    /// </summary>
+    private void TicketBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_fillingEditors) return;
+
+        var prefix = TicketRules.Prefix(TicketBox.Text);
+        var changed = prefix != _lastTicketPrefix;
+        _lastTicketPrefix = prefix;
+        if (prefix is null)
+        {
+            TicketHint.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        if (changed)
+            ApplyTicketDefaults();
+    }
+
+    private void ApplyTicketDefaults()
+    {
+        // A ticket means a new task, so release a row loaded from the list rather than renaming it.
+        if (_jobCodeLockedFromList)
+        {
+            _editingRowKey = null;
+            LockJobCodeFromList(false);
+        }
+
+        // Selecting a code never starts the timer; _fillingEditors also keeps the category change from renaming a row.
+        _fillingEditors = true;
+        try
+        {
+            var codes = JobCodeCombo.ItemsSource as IEnumerable<JobCode> ?? _state.JobCodes.Where(j => j.IsActive);
+            var code = TicketRules.FindServiceNowCode(codes);
+            if (code is not null)
+                JobCodeCombo.SelectedItem = code;
+            TicketHint.Visibility = code is null ? Visibility.Visible : Visibility.Collapsed;
+
+            var category = TicketRules.FindSupportCategory(_state.Categories);
+            if (category is not null)
+                CategoryCombo.SelectedItem = category;
+            CategoryCombo.Text = category ?? TicketRules.SupportCategory;
+        }
+        finally
+        {
+            _fillingEditors = false;
+        }
+    }
+
+    private void SetTicketText(string? ticket)
+    {
+        var wasFilling = _fillingEditors;
+        _fillingEditors = true;
+        TicketBox.Text = TicketRules.Normalize(ticket);
+        _fillingEditors = wasFilling;
+        _lastTicketPrefix = TicketRules.Prefix(TicketBox.Text);
+        TicketHint.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Add: logs a task with the selectors, task name and ticket and starts its timer (stopping any
+    /// running task). An identical task type joins its existing row as a new segment.
+    /// </summary>
+    private void TryAddFromInputs()
     {
         if (_state.IsHistoryMode) return;
 
-        // Start while a list row is loaded means "new task", so clear the edit lock first
+        // Add while a list row is loaded means "new task", so clear the edit lock first
         // after applying any pending rename.
         if (_jobCodeLockedFromList && _editingRowKey is not null)
             ApplySelectedTaskRename(rebuild: false);
 
+        var ticket = TicketRules.Normalize(TicketBox.Text);
         var task = TaskNameCombo.Text?.Trim() ?? string.Empty;
-        var category = CategoryCombo.Text?.Trim() ?? "General";
+        var category = string.IsNullOrWhiteSpace(CategoryCombo.Text) ? "General" : CategoryCombo.Text.Trim();
         var code = JobCodeCombo.SelectedItem as JobCode;
 
         // If typed task matches a favorite, inherit its job code when none selected
@@ -900,32 +974,27 @@ public partial class MainWindow : Window
             }
         }
 
-        if (string.IsNullOrWhiteSpace(task))
-        {
-            MessageBox.Show(this, "Enter a task name, then press Start.",
-                "Timesheet Buddy", MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
+        if (task.Length == 0)
+            task = ticket;
 
-        if (code is null && string.IsNullOrWhiteSpace(JobCodeCombo.Text))
+        var codeText = code is null ? JobCodeCombo.Text?.Trim() ?? string.Empty : string.Empty;
+        if (task.Length == 0 && code is null && codeText.Length == 0)
         {
-            MessageBox.Show(this, "Pick a job code, then press Start.",
+            MessageBox.Show(this, "Enter a task name or ticket, or pick a job code, then press Add.",
                 "Timesheet Buddy", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
         if (code is not null)
-            _state.StartOrSwitch(task, category, code);
+            _state.StartOrSwitch(task, category, code, ticket);
         else
-            _state.StartOrSwitch(task, category, null, JobCodeCombo.Text?.Trim() ?? string.Empty);
+            _state.StartOrSwitch(task, category, null, codeText, ticket);
 
         _scheduler.OnSessionChanged();
         BindStatus();
+        QueueTaskRebuild();
 
-        // Ready for the next new task after Enter / Start.
-        _fillingEditors = true;
-        TaskNameCombo.Text = string.Empty;
-        _fillingEditors = false;
+        // Task name and ticket stay in the boxes; the next Add is a new task, not a rename.
         _editingRowKey = null;
         LockJobCodeFromList(false);
     }
@@ -978,6 +1047,7 @@ public partial class MainWindow : Window
         var code = _state.FindJobCode(fav.JobCodeId);
         TaskNameCombo.Text = fav.Name;
         CategoryCombo.Text = fav.Category;
+        SetTicketText(null);
         if (code is not null)
             JobCodeCombo.SelectedItem = _state.JobCodes.FirstOrDefault(j => j.Id == code.Id);
         LockJobCodeFromList(true);
@@ -1450,7 +1520,11 @@ public sealed class TaskTypeRowModel : INotifyPropertyChanged
     public required string TaskName
     {
         get => _taskName;
-        set => Set(ref _taskName, value);
+        set
+        {
+            if (Set(ref _taskName, value))
+                OnPropertyChanged(nameof(TaskDisplay));
+        }
     }
 
     public required string Category
@@ -1461,6 +1535,10 @@ public sealed class TaskTypeRowModel : INotifyPropertyChanged
 
     public required Guid? JobCodeId { get; init; }
     public required string JobCodeText { get; init; }
+    public string Ticket { get; init; } = string.Empty;
+
+    /// <summary>Task column text: "INC0012345 · task name" when the row has a ticket.</summary>
+    public string TaskDisplay => TicketRules.Label(Ticket, TaskName);
     public string JobCodeDisplay => JobCode.FormatLabelFromStored(JobCodeText);
     public ObservableCollection<TaskSegmentRowModel> Children { get; } = [];
 
@@ -1470,7 +1548,8 @@ public sealed class TaskTypeRowModel : INotifyPropertyChanged
         TaskName = row.TaskName,
         Category = row.Category,
         JobCodeId = row.JobCodeId,
-        JobCodeText = row.JobCodeText
+        JobCodeText = row.JobCodeText,
+        Ticket = row.Ticket
     };
 
     /// <summary>Updates identity fields after a live rename without rebuilding the list.</summary>

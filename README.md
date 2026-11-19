@@ -5,7 +5,7 @@ A compact always-on-top WPF (.NET 10) timesheet helper for tracking time against
 ## What it does
 
 - **Compact tracker window** sized from your tray (~2× tray width; drag the bottom edge to change the height), draggable, pinable always-on-top
-- **Live timer** for the active task — starts when you pick a job code and/or enter/select a task name
+- **Live timer** for the active task — starts when you click **Add** (or press Enter) with a job code and/or task name, optionally with a ServiceNow ticket
 - **Settings** to manage job codes, favorite tasks, categories, recheck interval, and the catch-up popup interval
 - **Quick add** menu of favorite tasks (grouped by category)
 - **Still-working recheck** popup that asks if you are still on the active task, with hours/minutes until the next check
@@ -33,7 +33,7 @@ Or open `TimesheetBuddy/TimesheetBuddy.csproj` in Visual Studio 2022+/2026 and p
 ## Everyday use
 
 1. Pin the window if you want it always visible.
-2. Choose a **job code** and/or type/pick a **task name**, then **Start** (selecting a job code also starts the timer).
+2. Choose a **job code** and/or type/pick a **task name** (and a **Ticket** if there is one), then **Add**. Add puts the task on today's list and starts its timer; picking a job code on its own does not start anything. Typing a ticket that starts with `INC` or `RITM` plus a digit sets the job code to 03 (ServiceNow) and the category to Support.
 3. Use **+ Quick add** for favorite tasks.
 4. Open **⚙ Settings** to edit job codes, favorites, categories, and prompt intervals.
 5. Open **⏱** for today’s log and day notes.

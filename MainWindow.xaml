@@ -243,7 +243,7 @@
                     <TextBlock Text="Job code" Foreground="{StaticResource MutedBrush}" FontSize="10" Margin="0,0,0,2"/>
                     <ComboBox x:Name="JobCodeCombo" DisplayMemberPath="Display"
                               IsEditable="True"
-                              ToolTip="Choose a job code, then press Start to begin tracking"/>
+                              ToolTip="Choose a job code, then press Add to begin tracking"/>
                 </StackPanel>
 
                 <StackPanel Grid.Row="0" Grid.Column="2">
@@ -253,23 +253,39 @@
                 </StackPanel>
 
                 <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,6,0,0">
-                    <TextBlock Text="Task name" Foreground="{StaticResource MutedBrush}" FontSize="10" Margin="0,0,0,2"/>
                     <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*" MinWidth="120"/>
+                            <ColumnDefinition Width="118"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <ComboBox x:Name="TaskNameCombo" IsEditable="True"
+                        <TextBlock Text="Task name" Foreground="{StaticResource MutedBrush}" FontSize="10" Margin="0,0,0,2"/>
+                        <TextBlock Grid.Column="1" Text="Ticket" Foreground="{StaticResource MutedBrush}" FontSize="10" Margin="6,0,0,2"/>
+                        <ComboBox x:Name="TaskNameCombo" Grid.Row="1" IsEditable="True"
                                   KeyDown="TaskNameCombo_KeyDown"
                                   LostFocus="EditorFields_Changed"/>
-                        <Button x:Name="StartButton" Grid.Column="1" Style="{StaticResource PrimaryButton}"
-                                Content="Start" Margin="6,0,0,0" Padding="12,4"
-                                Click="Start_Click"/>
-                        <Button x:Name="StopButton" Grid.Column="2" Style="{StaticResource CompactButton}"
+                        <TextBox x:Name="TicketBox" Grid.Row="1" Grid.Column="1" Margin="6,0,0,0"
+                                 VerticalContentAlignment="Center" MinHeight="26" Padding="6,3"
+                                 CharacterCasing="Upper" MaxLength="40"
+                                 ToolTip="Ticket number, e.g. INC0012345 or RITM0012345. RITM / INC sets the job code to 03 — SERVICE-NOW and the category to Support."
+                                 TextChanged="TicketBox_TextChanged"
+                                 KeyDown="TicketBox_KeyDown"/>
+                        <Button x:Name="AddButton" Grid.Row="1" Grid.Column="2" Style="{StaticResource PrimaryButton}"
+                                Content="Add" Margin="6,0,0,0" Padding="12,4"
+                                ToolTip="Add a task with the job code, category, task name and ticket above, and start its timer"
+                                Click="Add_Click"/>
+                        <Button x:Name="StopButton" Grid.Row="1" Grid.Column="3" Style="{StaticResource CompactButton}"
                                 Content="Stop" Margin="4,0,0,0" Padding="10,4"
                                 Click="Stop_Click"/>
                     </Grid>
+                    <TextBlock x:Name="TicketHint" Foreground="{StaticResource MutedBrush}" FontSize="10"
+                               Margin="0,3,0,0" TextWrapping="Wrap" Visibility="Collapsed"
+                               Text="No 03 / ServiceNow job code found — pick a job code before Add."/>
                 </StackPanel>
 
                 <DockPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,8,0,0">
@@ -278,7 +294,7 @@
                     <TextBlock x:Name="StatusText" VerticalAlignment="Center"
                                Foreground="{StaticResource MutedBrush}" FontSize="11"
                                TextTrimming="CharacterEllipsis"
-                               Text="Idle — pick a job code or task to start"/>
+                               Text="Idle — pick a job code or task, then Add"/>
                 </DockPanel>
             </Grid>
 
@@ -340,7 +356,7 @@
                                             </Border.ContextMenu>
                                             <Border.ToolTip>
                                                 <TextBlock>
-                                                    <Run Text="{Binding TaskName, Mode=OneWay}"/>
+                                                    <Run Text="{Binding TaskDisplay, Mode=OneWay}"/>
                                                     <Run Text="·"/>
                                                     <Run Text="{Binding Category, Mode=OneWay}"/>
                                                     <Run Text="·"/>
@@ -376,7 +392,7 @@
                                                         Tag="{Binding}"
                                                         ToolTip="Show segments for this task on the loaded day"/>
                                                 <TextBlock Grid.Column="1" Style="{StaticResource TaskCellText}" FontWeight="SemiBold"
-                                                           Text="{Binding TaskName}"/>
+                                                           Text="{Binding TaskDisplay}"/>
                                                 <TextBlock Grid.Column="2" Style="{StaticResource TaskCellMuted}"
                                                            Text="{Binding Category}"/>
                                                 <TextBlock Grid.Column="3" Style="{StaticResource TaskCellMuted}"
