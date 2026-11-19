@@ -1,0 +1,19 @@
+<Project>
+  <!-- Models and the data-folder / settings.json layer, shared by the check projects that load or save data. -->
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)..\Models\AppSettings.cs" Link="Data\AppSettings.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)..\Models\JobCode.cs" Link="Data\JobCode.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)..\Models\FavoriteTask.cs" Link="Data\FavoriteTask.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)..\Models\TimeEntry.cs" Link="Data\TimeEntry.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)..\Services\IoRetry.cs" Link="Data\IoRetry.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)..\Services\DailySnapshots.cs" Link="Data\DailySnapshots.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)..\Services\DataFolder.cs" Link="Data\DataFolder.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)..\Services\SettingsMerge.cs" Link="Data\SettingsMerge.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)..\Services\SettingsStore.cs" Link="Data\SettingsStore.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)..\Services\LegacyData.cs" Link="Data\LegacyData.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)..\Services\TicketRules.cs" Link="Data\TicketRules.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)..\Services\ClientIdentity.cs" Link="Data\ClientIdentity.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)..\Services\Presence.cs" Link="Data\Presence.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)..\Services\ChangeJournal.cs" Link="Data\ChangeJournal.cs" />
+  </ItemGroup>
+</Project>

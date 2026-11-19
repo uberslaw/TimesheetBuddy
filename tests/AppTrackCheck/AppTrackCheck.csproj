@@ -10,7 +10,8 @@
 
   <ItemGroup>
     <Compile Include="..\..\Services\AppUsage.cs" Link="AppUsage.cs" />
-    <Compile Include="..\..\Services\DataFolder.cs" Link="DataFolder.cs" />
   </ItemGroup>
+
+  <Import Project="..\DataLayer.props" />
 
 </Project>

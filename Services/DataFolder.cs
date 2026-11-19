@@ -14,6 +14,10 @@ public static class DataFolder
     public const string DayNotesPattern = "day-notes-*.txt";
     public const string AppUsagePattern = "app-usage-*.json";
 
+    /// <summary>Change-log files (<c>journal\*.jsonl</c>, see ChangeJournal); copied with the data, never the session files.</summary>
+    public const string JournalFolderName = "journal";
+    public const string JournalExtension = ".jsonl";
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -41,6 +45,9 @@ public static class DataFolder
         CopyToEmpty,
         TargetHasData
     }
+
+    /// <summary>Default for "Move my data to the new folder": on for an empty target, off when the target has data.</summary>
+    public static bool DefaultMove(ChangeKind kind) => kind == ChangeKind.CopyToEmpty;
 
     private sealed class Pointer
     {
@@ -168,18 +175,216 @@ public static class DataFolder
     /// Copies the data files (originals stay put). A target file that would be overwritten is
     /// first renamed to its backup name. Returns the copied names.
     /// </summary>
-    public static IReadOnlyList<string> CopyData(string fromFolder, string toFolder, DateTime nowLocal)
+    public static IReadOnlyList<string> CopyData(string fromFolder, string toFolder, DateTime nowLocal) =>
+        Transfer(fromFolder, toFolder, move: false, nowLocal).Copied;
+
+    /// <summary>
+    /// What a folder change copies: <see cref="DataFiles"/>, then the daily snapshots in <c>backups\</c> and the
+    /// change-log files in <c>journal\</c> that the target does not already have (as relative names).
+    /// </summary>
+    public static IReadOnlyList<string> TransferFiles(string fromFolder, string toFolder)
     {
-        var copied = new List<string>();
-        foreach (var name in DataFiles(fromFolder))
+        var names = DataFiles(fromFolder).ToList();
+        foreach (var (path, _) in DailySnapshots.List(fromFolder).Reverse())
         {
-            var target = Path.Combine(toFolder, name);
-            if (File.Exists(target))
-                File.Move(target, Path.Combine(toFolder, BackupName(name, nowLocal)), overwrite: true);
-            File.Copy(Path.Combine(fromFolder, name), target);
-            copied.Add(name);
+            var relative = Path.Combine(DailySnapshots.FolderName, Path.GetFileName(path));
+            if (!File.Exists(Path.Combine(toFolder, relative)))
+                names.Add(relative);
         }
 
-        return copied;
+        var journal = Path.Combine(fromFolder, JournalFolderName);
+        if (Directory.Exists(journal))
+        {
+            foreach (var name in Matching(journal, "*" + JournalExtension, JournalExtension))
+            {
+                var relative = Path.Combine(JournalFolderName, name);
+                if (!File.Exists(Path.Combine(toFolder, relative)))
+                    names.Add(relative);
+            }
+        }
+
+        return names;
     }
+
+    public sealed record TransferResult(
+        IReadOnlyList<string> Copied,
+        IReadOnlyList<string> BackedUp,
+        IReadOnlyList<string> Removed,
+        IReadOnlyList<string> NotRemoved);
+
+    /// <summary>
+    /// Copies <see cref="TransferFiles"/> to <paramref name="toFolder"/> (an existing target file is first renamed
+    /// to its backup name), checks every copy against its original (SHA-256), then runs <paramref name="commit"/>
+    /// (switch the store, save, write the pointer). If any of that throws, the copies are deleted, the renamed
+    /// target files are put back and the exception is rethrown; the originals are never touched.
+    /// Only after a successful commit, and only with <paramref name="move"/>, each original that is still
+    /// byte-for-byte what was copied is deleted. A file that can't be deleted is left and listed in
+    /// <see cref="TransferResult.NotRemoved"/>. crash.log, the pointer and leftover .tmp/.bak/.unreadable files are
+    /// never part of it. <paramref name="beforeCopy"/> lets checks inject a failure.
+    /// </summary>
+    public static TransferResult Transfer(string fromFolder, string toFolder, bool move, DateTime nowLocal,
+        Action? commit = null, Action<string>? beforeCopy = null)
+    {
+        var names = TransferFiles(fromFolder, toFolder);
+        var transaction = new FileTransaction(nowLocal);
+        var hashes = new Dictionary<string, string>();
+        try
+        {
+            foreach (var name in names)
+            {
+                beforeCopy?.Invoke(name);
+                var source = Path.Combine(fromFolder, name);
+                var target = Path.Combine(toFolder, name);
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                transaction.MoveAside(target);
+                transaction.WillCreate(target);
+                IoRetry.Run(() => File.Copy(source, target));
+                hashes[name] = Hash(source);
+            }
+
+            foreach (var name in names)
+            {
+                if (Hash(Path.Combine(toFolder, name)) != hashes[name])
+                    throw new IOException($"The copy of {name} in {toFolder} does not match the original.");
+            }
+
+            commit?.Invoke();
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
+
+        var removed = new List<string>();
+        var notRemoved = new List<string>();
+        if (move)
+        {
+            foreach (var name in names)
+            {
+                var source = Path.Combine(fromFolder, name);
+                try
+                {
+                    if (Hash(source) != hashes[name])
+                    {
+                        notRemoved.Add(name);
+                        continue;
+                    }
+
+                    IoRetry.Run(() => File.Delete(source));
+                    removed.Add(name);
+                }
+                catch
+                {
+                    notRemoved.Add(name);
+                }
+            }
+
+            DeleteIfEmpty(DailySnapshots.FolderFor(fromFolder));
+            DeleteIfEmpty(Path.Combine(fromFolder, JournalFolderName));
+        }
+
+        return new TransferResult(names, transaction.BackupNames, removed, notRemoved);
+    }
+
+    /// <summary>
+    /// Deletes the given data files from <paramref name="folder"/> after their content has been merged elsewhere.
+    /// Returns (removed, not removed).
+    /// </summary>
+    public static (IReadOnlyList<string> Removed, IReadOnlyList<string> NotRemoved) RemoveFiles(string folder,
+        IEnumerable<string> names)
+    {
+        var removed = new List<string>();
+        var notRemoved = new List<string>();
+        foreach (var name in names)
+        {
+            try
+            {
+                IoRetry.Run(() => File.Delete(Path.Combine(folder, name)));
+                removed.Add(name);
+            }
+            catch
+            {
+                notRemoved.Add(name);
+            }
+        }
+
+        return (removed, notRemoved);
+    }
+
+    public static string Hash(string path)
+    {
+        using var stream = IoRetry.Run(() => File.OpenRead(path));
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream));
+    }
+
+    private static void DeleteIfEmpty(string folder)
+    {
+        try
+        {
+            if (Directory.Exists(folder) && !Directory.EnumerateFileSystemEntries(folder).Any())
+                Directory.Delete(folder);
+        }
+        catch
+        {
+            // An empty folder left behind is harmless.
+        }
+    }
+}
+
+/// <summary>
+/// Records file changes in a target folder so they can be undone: files about to be overwritten are renamed
+/// (or copied) to <c>name.bak-yyyyMMddHHmmss</c>, new files are remembered. Rollback deletes what was written and
+/// puts the originals back. On success the .bak files stay, as with Replace.
+/// </summary>
+public sealed class FileTransaction(DateTime nowLocal)
+{
+    private readonly List<string> _created = [];
+    private readonly List<(string Path, string Backup)> _asides = [];
+
+    public IReadOnlyList<string> BackupNames => _asides.Select(a => Path.GetFileName(a.Backup)).ToList();
+
+    /// <summary>Renames an existing file to its backup name so a new one can take its place.</summary>
+    public void MoveAside(string path)
+    {
+        if (!File.Exists(path)) return;
+        var backup = BackupPath(path);
+        IoRetry.Run(() => File.Move(path, backup, overwrite: true));
+        _asides.Add((path, backup));
+    }
+
+    /// <summary>Copies an existing file to its backup name; it will be rewritten in place.</summary>
+    public void CopyAside(string path)
+    {
+        if (!File.Exists(path))
+        {
+            WillCreate(path);
+            return;
+        }
+
+        var backup = BackupPath(path);
+        IoRetry.Run(() => File.Copy(path, backup, overwrite: true));
+        _asides.Add((path, backup));
+    }
+
+    public void WillCreate(string path)
+    {
+        if (!_created.Contains(path)) _created.Add(path);
+    }
+
+    public void Rollback()
+    {
+        foreach (var path in _created)
+        {
+            try { if (File.Exists(path)) File.Delete(path); } catch { }
+        }
+
+        foreach (var (path, backup) in Enumerable.Reverse(_asides))
+        {
+            try { File.Move(backup, path, overwrite: true); } catch { }
+        }
+    }
+
+    private string BackupPath(string path) =>
+        Path.Combine(Path.GetDirectoryName(path)!, DataFolder.BackupName(Path.GetFileName(path), nowLocal));
 }

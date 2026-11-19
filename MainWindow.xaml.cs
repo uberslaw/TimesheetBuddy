@@ -43,7 +43,11 @@ public partial class MainWindow : Window
         DayCodeTotalsList.ItemsSource = _dayCodeRows;
         _lockWatcher = new ScreenLockWatcher(_state);
         _lockWatcher.UnlockPrompt += OnScreenUnlocked;
-        _lockWatcher.LockChanged += locked => App.AppTracker.SetLocked(locked);
+        _lockWatcher.LockChanged += locked =>
+        {
+            App.AppTracker.SetLocked(locked);
+            App.OnScreenLockChanged(locked);
+        };
         _uiTimer.Tick += (_, _) => RefreshTimer();
         _state.PropertyChanged += StateOnPropertyChanged;
         _state.SettingsChanged += (_, _) =>
@@ -62,6 +66,9 @@ public partial class MainWindow : Window
         _scheduler.RecheckDue += OnRecheckDue;
         _scheduler.FifteenMinuteDue += OnFifteenDue;
     }
+
+    /// <summary>Whether Windows is locked now (probed at start, then followed through the lock events).</summary>
+    internal bool IsScreenLocked => _lockWatcher.IsLocked;
 
     private void Window_Loaded(object sender, RoutedEventArgs e)
     {
@@ -1121,6 +1128,14 @@ public partial class MainWindow : Window
         weeks.Click += (_, _) => OpenWeekBrowser();
         menu.Items.Add(weeks);
 
+        var changeLog = new MenuItem { Header = "Change log…", ToolTip = "Recent changes from every PC using this data folder" };
+        changeLog.Click += (_, _) => new ChangeLogWindow { Owner = this }.ShowDialog();
+        menu.Items.Add(changeLog);
+
+        var import = new MenuItem { Header = "Import data…", ToolTip = "Bring entries in from a backup, another folder or an earlier release" };
+        import.Click += (_, _) => new ImportDataWindow { Owner = this }.ShowDialog();
+        menu.Items.Add(import);
+
         var jobCodes = new MenuItem { Header = "Job code view" };
         jobCodes.Click += (_, _) => OpenJobCodeView();
         menu.Items.Add(jobCodes);
@@ -1497,6 +1512,11 @@ public partial class MainWindow : Window
         // A hidden widget still counts as an open window and would keep the app alive.
         _widget?.Close();
         _widget = null;
+        App.CloseOverlapWindows();
+
+        // Another PC asked this one to close: nothing is saved (App.CloseWithoutSaving).
+        if (App.ClosingWithoutSave)
+            return;
 
         // A normal close finishes a running timer onto today's list and closes any running
         // No Task Selected time into pending, without starting new idle time. Neither

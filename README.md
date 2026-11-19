@@ -13,7 +13,11 @@ A compact always-on-top WPF (.NET 10) timesheet helper for tracking time against
 - **Day log** with today’s entries plus a free-form notes area
 - **App Track** (optional, off by default): tick **Menu → App Track** to log how long each program is in the foreground, by program name only (never window titles, web pages, documents or email). It pauses after 5 minutes without input and while the screen is locked. **Menu → App usage…** shows each day's programs with time and percentage. It is kept apart from your timesheet and never appears in totals or exports.
 
-Data is stored locally in `%LocalAppData%\TimesheetBuddy\` (`settings.json` plus `day-notes-*.txt` and, with App Track on, `app-usage-*.json`). To keep it somewhere else (another drive, a synced folder), use **Menu → Settings… → Data → Browse…**; your data is copied there and the old copy is left in place. The crash log always stays in `%LocalAppData%\TimesheetBuddy\`.
+Data is stored locally in `%LocalAppData%\TimesheetBuddy\` (`settings.json` plus `day-notes-*.txt` and, with App Track on, `app-usage-*.json`, a daily snapshot in `backups\` and the change log in `journal\`). To keep it somewhere else (another drive, a OneDrive folder), use **Menu → Settings… → Data → Browse…**; your data is copied there and checked. Tick **Move my data** to delete the old copy afterwards; if the folder already has data (another PC's), choose **Merge** to combine both. The crash log and this PC's id (`client.json`) always stay in `%LocalAppData%\TimesheetBuddy\`.
+
+- **Import data…** (Menu, or Settings → Data) brings entries, day notes and App Track usage in from a backup, a OneDrive conflict copy, another folder or an earlier Timesheet Buddy release, with a preview first. Older releases' files are also upgraded automatically when the app opens them (the original is kept as `settings.json.bak-…`).
+- **Change log…** (Menu) lists recent changes from every PC using the data folder, with the PC's name.
+- **Two PCs at once:** with a shared OneDrive folder, if the app is open on another PC you are asked "Are you active on this one?" (never while the screen is locked). Yes lets you keep any of the other PC's entries for today, then the other PC closes without saving. Not now leaves both open; their changes are merged on save. Detection takes about 20 seconds plus OneDrive's sync time.
 
 ## Requirements
 

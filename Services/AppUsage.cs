@@ -231,6 +231,13 @@ public sealed class AppUsageAccumulator
             _days.Remove(day);
     }
 
+    /// <summary>Forgets every saved day, today's too, so the next use reads the files again (after an import merged them).</summary>
+    public void ForgetSaved()
+    {
+        foreach (var day in _days.Keys.Where(d => !_dirty.Contains(d)).ToList())
+            _days.Remove(day);
+    }
+
     private Dictionary<string, AppUsageApp> Day(DateOnly day)
     {
         if (_days.TryGetValue(day, out var apps)) return apps;

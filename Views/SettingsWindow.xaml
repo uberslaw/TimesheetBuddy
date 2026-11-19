@@ -149,11 +149,14 @@
                         <Button x:Name="UseDefaultFolderButton" Style="{StaticResource CompactButton}"
                                 Content="Use default" Padding="12,3" Margin="8,0,0,0"
                                 Click="UseDefaultFolder_Click"/>
+                        <Button Style="{StaticResource CompactButton}" Content="Import data…" Padding="12,3"
+                                Margin="8,0,0,0" ToolTip="Bring entries in from a backup, another folder or an earlier release"
+                                Click="ImportData_Click"/>
                     </StackPanel>
                     <TextBlock TextWrapping="Wrap" Margin="0,10,0,0" Foreground="{StaticResource MutedBrush}"
                                Text="Your time entries, settings, day notes and App Track usage are stored here."/>
                     <TextBlock TextWrapping="Wrap" Margin="0,4,0,0" Foreground="{StaticResource MutedBrush}"
-                               Text="Changing the folder happens straight away, when you confirm it, not when you press Save, and Cancel does not undo it. Your data is copied to the new folder; the old copy is left in place as a backup."/>
+                               Text="Changing the folder happens straight away, when you confirm it, not when you press Save, and Cancel does not undo it. Your data is copied to the new folder and checked; tick Move my data to delete the old copy afterwards. If the folder already has data (another PC's OneDrive folder, say) you can merge yours into it."/>
                     <TextBlock x:Name="CrashLogNote" TextWrapping="Wrap" Margin="0,4,0,0"
                                Foreground="{StaticResource MutedBrush}"/>
                     <TextBlock x:Name="UnavailableFolderText" TextWrapping="Wrap" Margin="0,10,0,0"

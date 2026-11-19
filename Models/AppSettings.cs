@@ -1,7 +1,12 @@
+using System.Text.Json.Serialization;
+
 namespace TimesheetBuddy.Models;
 
 public sealed class AppSettings
 {
+    /// <summary>Data format; missing (0) in files from earlier releases. See <c>LegacyData</c>.</summary>
+    public int FormatVersion { get; set; }
+
     public bool AlwaysOnTop { get; set; } = true;
     public int RecheckHours { get; set; }
     public int RecheckMinutes { get; set; } = 30;
@@ -44,6 +49,18 @@ public sealed class AppSettings
     /// Null means the view has not been customized and should list active codes.
     /// </summary>
     public List<Guid>? JobCodeViewIds { get; set; }
+
+    /// <summary>
+    /// Ids of time entries removed from <see cref="Entries"/> (purged soft deletes, trimmed segments), so a
+    /// merge with another PC's copy or an older backup does not bring them back. Kept for about 400 days.
+    /// </summary>
+    public List<RemovedEntry> RemovedEntries { get; set; } = [];
+}
+
+public sealed class RemovedEntry
+{
+    public Guid Id { get; set; }
+    public DateTime RemovedUtc { get; set; }
 }
 
 public sealed class ActiveSession
@@ -55,6 +72,10 @@ public sealed class ActiveSession
     public string JobCodeText { get; set; } = string.Empty;
     public string Ticket { get; set; } = string.Empty;
     public DateTime StartedUtc { get; set; }
+
+    /// <summary>Install running this timer; another install's session is not resumed. Empty in older data.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? ClientId { get; set; }
 }
 
 /// <summary>
