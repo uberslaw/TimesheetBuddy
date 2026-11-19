@@ -148,6 +148,89 @@ var clock = Local(17, 0);
     Check(yesterday.StartUtc == Local(9, 0, 0, 10), "the same task on another day keeps its time");
 }
 
+// Move Time: every entry of the row on the day moves; other days stay.
+var mtg = Guid.NewGuid();
+const string MtgText = "MTG — Meetings";
+{
+    var a = Timer("Spec", Local(9, 0), Local(9, 30));
+    var b = Timer("Spec", Local(11, 0), Local(11, 20));
+    var yesterday = Timer("Spec", Local(9, 0, 0, 10), Local(9, 40, 0, 10));
+    var unrelated = Timer("Other", Local(12, 0), Local(12, 15));
+    var entries = new List<TimeEntry> { a, b, yesterday, unrelated };
+    var key = TaskTypeSummary.KeyOf(a);
+    var before = DayTotals.ForDay(entries.Where(e => TaskTypeSummary.IsOnDay(e, day)), clock);
+    var result = RowTimeEdit.Move(entries, null, day, key, mtg, MtgText);
+    Check(result.Applied && result.Moved == 2, "move re-points both of the day's entries");
+    Check(a.JobCodeId == mtg && b.JobCodeId == mtg && a.JobCodeText == MtgText && b.JobCodeText == MtgText,
+        "moved entries take the target's id and text");
+    Check(yesterday.JobCodeId == dev && yesterday.JobCodeText == "DEV — Development", "the same task on another day is untouched");
+    Check(unrelated.JobCodeId == dev, "other rows on the day are untouched");
+    var rows = TaskTypeSummary.Build(entries, day, clock);
+    Check(rows.All(r => r.Key != key), "the source row is gone");
+    Check(rows.Single(r => r.Key == result.NewKey).Total == TimeSpan.FromMinutes(50), "the target row holds all 50 min");
+    Check(DayTotals.ForDay(entries.Where(e => TaskTypeSummary.IsOnDay(e, day)), clock) == before, "the day's total is unchanged");
+    var band = DayTotals.ByJobCodeForDay(entries, day, clock);
+    Check(band.Count == 2 && band.Any(r => r.Label == JobCode.FormatLabelFromStored(MtgText) && r.Total == TimeSpan.FromMinutes(50)),
+        "the per-code band shows the time under the target code");
+}
+
+// Rows with the same task + category on the target code merge.
+{
+    var source = Timer("Spec", Local(9, 0), Local(9, 30));
+    var existing = Timer("Spec", Local(10, 0), Local(10, 45), mtg, MtgText);
+    var entries = new List<TimeEntry> { source, existing };
+    var result = RowTimeEdit.Move(entries, null, day, TaskTypeSummary.KeyOf(source), mtg, MtgText);
+    var rows = TaskTypeSummary.Build(entries, day, clock);
+    Check(result.Applied && rows.Count == 1, "moving onto a code with the same task row merges them");
+    Check(rows[0].SegmentCount == 2 && rows[0].Total == TimeSpan.FromMinutes(75), "the merged row has both segments and 75 min");
+}
+
+// A running session on the row is re-pointed and keeps running.
+{
+    var done = Timer("Spec", Local(9, 0), Local(9, 30));
+    var running = Timer("Spec", Local(16, 0), null);
+    var entries = new List<TimeEntry> { done, running };
+    var active = new ActiveSession
+    {
+        EntryId = running.Id,
+        TaskName = "Spec",
+        Category = "Development",
+        JobCodeId = dev,
+        JobCodeText = "DEV — Development",
+        StartedUtc = running.StartUtc
+    };
+    var result = RowTimeEdit.Move(entries, active, day, TaskTypeSummary.KeyOf(done), mtg, MtgText);
+    Check(result.Applied && result.ActiveMutated, "the running session is re-pointed");
+    Check(result.ActiveSession is { } s && s.JobCodeId == mtg && s.JobCodeText == MtgText &&
+          s.EntryId == running.Id && s.StartedUtc == Local(16, 0), "session has the target code, same entry and start");
+    Check(running.EndUtc is null && running.StartUtc == Local(16, 0) && running.JobCodeId == mtg,
+        "the running entry is still open under the target code");
+    var moved = result.ActiveSession!;
+    Check(TaskTypeSummary.KeyOf(moved.TaskName, moved.Category, moved.JobCodeId, moved.JobCodeText) == result.NewKey,
+        "the session matches the moved row's key");
+}
+
+// A session on another row is left alone.
+{
+    var mine = Timer("Spec", Local(9, 0), Local(9, 30));
+    var otherRunning = Timer("Other", Local(16, 0), null);
+    var entries = new List<TimeEntry> { mine, otherRunning };
+    var active = new ActiveSession { EntryId = otherRunning.Id, TaskName = "Other", Category = "Development", JobCodeId = dev, JobCodeText = "DEV — Development", StartedUtc = otherRunning.StartUtc };
+    var result = RowTimeEdit.Move(entries, active, day, TaskTypeSummary.KeyOf(mine), mtg, MtgText);
+    Check(result.Applied && !result.ActiveMutated && ReferenceEquals(result.ActiveSession, active), "a session on another row is not changed");
+}
+
+// Moving to "No job code" and refusing the row's own code.
+{
+    var a = Timer("Spec", Local(9, 0), Local(9, 30));
+    var entries = new List<TimeEntry> { a };
+    var same = RowTimeEdit.Move(entries, null, day, TaskTypeSummary.KeyOf(a), dev, "DEV — Development");
+    Check(!same.Applied && a.JobCodeId == dev, "moving to the row's own code is refused");
+    var none = RowTimeEdit.Move(entries, null, day, TaskTypeSummary.KeyOf(a), null, string.Empty);
+    Check(none.Applied && a.JobCodeId is null && a.JobCodeText.Length == 0, "moving to No job code clears id and text");
+    Check(DayTotals.ByJobCodeForDay(entries, day, clock).Single().Label == "No job code", "the band shows it under No job code");
+}
+
 Console.WriteLine();
 if (failures.Count == 0)
 {

@@ -469,6 +469,32 @@ public sealed class AppState : INotifyPropertyChanged
         return null;
     }
 
+    /// <summary>
+    /// Moves every entry of a task-type row on <see cref="ViewingDate"/> to another job code (or none).
+    /// A running timer on that row keeps running under the new code. Returns the row's new key,
+    /// or null with <paramref name="error"/> set when nothing changed.
+    /// </summary>
+    public string? MoveTaskTypeToJobCode(string key, Guid? targetId, string targetText, out string? error)
+    {
+        var result = RowTimeEdit.Move(_settings.Entries, ActiveSession, ViewingDate, key, targetId, targetText);
+        if (!result.Applied)
+        {
+            error = result.Error ?? "Could not move that time.";
+            return null;
+        }
+
+        if (result.ActiveMutated)
+        {
+            ActiveSession = result.ActiveSession;
+            StatusText = $"Tracking: {ActiveTaskLabel}";
+        }
+
+        error = null;
+        RefreshToday();
+        Persist();
+        return result.NewKey;
+    }
+
     public void EnterHistoryMode(DateTime dayLocal)
     {
         var day = dayLocal.Date;

@@ -626,6 +626,86 @@ public partial class MainWindow : Window
         StatusText.Text = $"Moved {row.TaskName} to {dialog.SelectedCode.Display}";
     }
 
+    private void MoveTimeMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (!TryGetMenuRow(sender, out var row)) return;
+
+        var summary = TaskTypeSummary.Build(_state.Settings.Entries, _state.ViewingDate, DateTime.UtcNow);
+        var source = summary.FirstOrDefault(r => r.Key == row.Key);
+        if (source is null)
+        {
+            MessageBox.Show(this, "That task no longer has time on this day.", "Move time",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var targets = MoveTargetsFor(source, summary);
+        if (targets.Count == 0)
+        {
+            MessageBox.Show(this, "There is no other job code to move this time to. Add one from Menu → Add job code….",
+                "Move time", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var sourceLabel = JobCode.FormatLabelFromStored(source.JobCodeText);
+        var dialog = new MoveTimeWindow(
+            source.TaskName,
+            sourceLabel == "—" ? "No job code" : sourceLabel,
+            source.Total,
+            source.SegmentCount,
+            targets)
+        { Owner = this };
+        if (dialog.ShowDialog() != true || dialog.SelectedTarget is not { } target)
+            return;
+
+        var oldKey = source.Key;
+        var newKey = _state.MoveTaskTypeToJobCode(oldKey, target.JobCodeId, target.JobCodeText, out var error);
+        if (newKey is null)
+        {
+            MessageBox.Show(this, error ?? "Could not move that time.", "Move time",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        if (_expandedKeys.Remove(oldKey))
+            _expandedKeys.Add(newKey);
+        if (_editingRowKey == oldKey)
+        {
+            _editingRowKey = newKey;
+            _fillingEditors = true;
+            var code = _state.FindJobCode(target.JobCodeId);
+            JobCodeCombo.SelectedItem = code is null ? null : _state.JobCodes.FirstOrDefault(j => j.Id == code.Id);
+            if (code is null)
+                JobCodeCombo.Text = target.JobCodeId is null ? string.Empty : target.JobCodeText;
+            _fillingEditors = false;
+            LockJobCodeFromList(true);
+        }
+
+        QueueTaskRebuild();
+        RefreshDayCodeTotals();
+        BindStatus();
+        StatusText.Text = $"Moved {DayTotals.FormatCompact(source.Total)} of {source.TaskName} to {target.Display}";
+    }
+
+    /// <summary>
+    /// Active job codes other than the row's own, plus "No job code" when the day already has a row
+    /// without a code (and the source is not one of them).
+    /// </summary>
+    private List<MoveTarget> MoveTargetsFor(TaskTypeRow source, IReadOnlyList<TaskTypeRow> summary)
+    {
+        var targets = _state.JobCodes
+            .Where(c => c.IsActive && !RowTimeEdit.IsSameCode(source.JobCodeId, source.JobCodeText, c.Id, c.Display))
+            .OrderBy(c => c.Code, StringComparer.OrdinalIgnoreCase)
+            .Select(c => new MoveTarget(c.Id, c.Display, c.Display))
+            .ToList();
+
+        static bool NoCode(TaskTypeRow r) => r.JobCodeId is null && string.IsNullOrWhiteSpace(r.JobCodeText);
+        if (!NoCode(source) && summary.Any(NoCode))
+            targets.Insert(0, new MoveTarget(null, string.Empty, "No job code"));
+
+        return targets;
+    }
+
     private void AssignAndDeleteMenu_Click(object sender, RoutedEventArgs e)
     {
         if (!TryGetMenuRow(sender, out var row)) return;

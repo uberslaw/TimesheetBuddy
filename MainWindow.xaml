@@ -321,6 +321,8 @@
                                                 <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
                                                     <MenuItem Header="Modify Time…" Click="ModifyTimeMenu_Click"
                                                               CommandParameter="{Binding}"/>
+                                                    <MenuItem Header="Move Time…" Click="MoveTimeMenu_Click"
+                                                              CommandParameter="{Binding}"/>
                                                     <MenuItem x:Name="StartOrContinueItem"
                                                               Header="Start timer"
                                                               Click="StartTaskMenu_Click"
