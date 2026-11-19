@@ -16,7 +16,10 @@ namespace TimesheetBuddy.Services;
 /// and never comes back. Removing an entry from the list without a tombstone does nothing to the other copy,
 /// so a stale or lagging file can never delete entries.</item>
 /// <item>Same id on both sides: the preferred side wins, except that in a concurrent merge an entry this
-/// process has not touched since the last sync takes the other side's edit (soft delete, restore, moves).</item>
+/// process has not touched since the last sync takes the other side's edit (soft delete, restore, moves), and an
+/// entry both sides changed takes the later <see cref="TimeEntry.ModifiedAtUtc"/>.</item>
+/// <item>An open timer entry (no end) is never brought in from the other copy: it is that install's running timer
+/// and arrives once it is finished.</item>
 /// <item>Job codes match by id, else by code text (the other side's entries are re-pointed); favorites by id,
 /// else by name + category; categories by text, case-insensitive.</item>
 /// <item>Preferences (window and widget positions, prompts, App Track switch), the running timer and No Task
@@ -166,8 +169,7 @@ public static class SettingsMerge
                 var m = mine.Entries[index];
                 var takeTheirs = mode == Mode.Import
                     ? preferIncoming && t.Id != activeId && Fingerprint(m) != Fingerprint(t)
-                    : baseById.TryGetValue(t.Id, out var b) && Fingerprint(m) == Fingerprint(b) &&
-                      Fingerprint(t) != Fingerprint(b) && t.Id != activeId;
+                    : t.Id != activeId && Fingerprint(t) != Fingerprint(m) && TheirEditWins(m, t, baseById.GetValueOrDefault(t.Id));
                 if (takeTheirs)
                 {
                     contentKeys.Remove(ContentKey(m));
@@ -195,7 +197,8 @@ public static class SettingsMerge
                 continue;
             }
 
-            if (mode == Mode.Import && t.EndUtc is null && t.ManualMinutes <= 0)
+            // Another install's running timer arrives once it is finished; its end is unknown until then.
+            if (t.EndUtc is null && t.ManualMinutes <= 0)
             {
                 report.SkippedRunning++;
                 continue;
@@ -412,9 +415,74 @@ public static class SettingsMerge
             e.ManualMinutes);
     }
 
-    private static string Fingerprint(TimeEntry e) => string.Join("|",
+    /// <summary>
+    /// Same id changed on this side and the other: the other side's edit wins when this side has not touched the
+    /// entry since the last sync, or when both changed it and theirs is the later <see cref="TimeEntry.ModifiedAtUtc"/>.
+    /// </summary>
+    private static bool TheirEditWins(TimeEntry mine, TimeEntry theirs, TimeEntry? baseline)
+    {
+        if (baseline is not null && Fingerprint(mine) == Fingerprint(baseline))
+            return Fingerprint(theirs) != Fingerprint(baseline);
+        if (baseline is not null && Fingerprint(theirs) == Fingerprint(baseline))
+            return false;
+        return theirs.ModifiedAtUtc is DateTime t && (mine.ModifiedAtUtc is not DateTime m || t > m);
+    }
+
+    /// <summary>Content of an entry, without who changed it or when.</summary>
+    public static string Fingerprint(TimeEntry e) => string.Join("|",
         e.Id, e.StartUtc.Ticks, e.EndUtc?.Ticks, e.TaskName, e.Category, e.JobCodeId, e.JobCodeText, e.Ticket,
         e.Notes, e.ManualMinutes, e.Source, e.IsDeleted, e.DeletedAtLocal?.Ticks);
+
+    /// <summary>
+    /// Stamps entries that are new or changed since <paramref name="baseline"/> (id → <see cref="Fingerprint"/>)
+    /// with this install and <paramref name="nowUtc"/>. A new entry also gets its creator, unless it already has one
+    /// (an entry merged in from another install keeps that install). Returns how many were stamped.
+    /// </summary>
+    public static int Stamp(AppSettings settings, IReadOnlyDictionary<Guid, string> baseline, Guid clientId,
+        string machine, DateTime nowUtc)
+    {
+        var stamped = 0;
+        foreach (var e in settings.Entries ?? [])
+        {
+            var known = baseline.TryGetValue(e.Id, out var print);
+            if (known && print == Fingerprint(e)) continue;
+            if (!known && e.CreatedByClientId is not null && e.ModifiedAtUtc is not null) continue;
+            if (e.CreatedByClientId is null)
+            {
+                e.CreatedByClientId = clientId;
+                e.CreatedByMachine = machine;
+            }
+
+            e.ModifiedByClientId = clientId;
+            e.ModifiedByMachine = machine;
+            e.ModifiedAtUtc = nowUtc;
+            stamped++;
+        }
+
+        if (settings.ActiveSession is { } session)
+            session.ClientId = clientId;
+        return stamped;
+    }
+
+    /// <summary>
+    /// After loading the shared file: another install's running timer (session and open entry) is not ours to
+    /// resume. Data without client stamps (earlier releases) is treated as ours. Returns true when anything was dropped.
+    /// </summary>
+    public static bool DropForeignRunning(AppSettings settings, Guid clientId)
+    {
+        var dropped = false;
+        if (settings.ActiveSession is { ClientId: Guid owner } && owner != clientId)
+        {
+            settings.ActiveSession = null;
+            dropped = true;
+        }
+
+        var activeId = settings.ActiveSession?.EntryId;
+        dropped |= (settings.Entries ?? []).RemoveAll(e =>
+            e.EndUtc is null && e.ManualMinutes <= 0 && e.Id != activeId &&
+            e.CreatedByClientId is Guid creator && creator != clientId) > 0;
+        return dropped;
+    }
 
     private static string CodeFingerprint(JobCode c) => $"{c.Id}|{c.Code}|{c.Description}|{c.IsActive}";
 
@@ -457,6 +525,11 @@ public static class SettingsMerge
         ManualMinutes = e.ManualMinutes,
         Source = e.Source,
         IsDeleted = e.IsDeleted,
-        DeletedAtLocal = e.DeletedAtLocal
+        DeletedAtLocal = e.DeletedAtLocal,
+        CreatedByClientId = e.CreatedByClientId,
+        CreatedByMachine = e.CreatedByMachine,
+        ModifiedByClientId = e.ModifiedByClientId,
+        ModifiedByMachine = e.ModifiedByMachine,
+        ModifiedAtUtc = e.ModifiedAtUtc
     };
 }

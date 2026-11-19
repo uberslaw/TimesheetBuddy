@@ -11,7 +11,6 @@
   <ItemGroup>
     <Compile Include="..\..\Services\TimerWidgetLayout.cs" Link="TimerWidgetLayout.cs" />
     <Compile Include="..\..\Services\WidgetVisibilityRules.cs" Link="WidgetVisibilityRules.cs" />
-    <Compile Include="..\..\Services\TicketRules.cs" Link="TicketRules.cs" />
     <Compile Include="..\..\Services\AppState.cs" Link="AppState.cs" />
     <Compile Include="..\..\Services\NoTaskTime.cs" Link="NoTaskTime.cs" />
     <Compile Include="..\..\Services\UnaccountedTime.cs" Link="UnaccountedTime.cs" />

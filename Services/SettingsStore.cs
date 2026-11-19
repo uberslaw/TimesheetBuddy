@@ -35,6 +35,7 @@ public sealed class SettingsStore
     private string? _baselineJson;
     private (long Length, DateTime WriteUtc)? _stamp;
     private HashSet<Guid> _baselineIds = [];
+    private Dictionary<Guid, string> _baselinePrints = [];
     private bool _suspended;
 
     public SettingsStore(string folder)
@@ -45,6 +46,12 @@ public sealed class SettingsStore
 
     /// <summary>Raised after a save that merged in changes another process had written.</summary>
     public event Action<SettingsMerge.Report>? ExternalChangesMerged;
+
+    /// <summary>
+    /// This install. When set, saves stamp new and changed entries with it, and loads drop another install's
+    /// running timer (<see cref="SettingsMerge.DropForeignRunning"/>).
+    /// </summary>
+    public ClientIdentity? Client { get; set; }
 
     /// <summary>Local clock for the daily snapshot; replaceable in checks.</summary>
     public Func<DateTime> Clock { get; set; } = () => DateTime.Now;
@@ -98,6 +105,8 @@ public sealed class SettingsStore
         }
 
         LastLoad = result;
+        if (Client is not null)
+            SettingsMerge.DropForeignRunning(parsed, Client.ClientId);
         if (result.Release != "current")
             UpgradeBackup = KeepUpgradeBackup(_path, Clock());
 
@@ -131,6 +140,8 @@ public sealed class SettingsStore
 
         var nowLocal = Clock();
         var nowUtc = nowLocal.ToUniversalTime();
+        if (Client is not null)
+            SettingsMerge.Stamp(settings, _baselinePrints, Client.ClientId, Client.Machine, nowUtc);
         SettingsMerge.RecordRemovals(settings, _baselineIds, nowUtc);
         var report = MergeFromDisk(settings, nowUtc);
         DailySnapshots.TakeIfDue(Folder, nowLocal);
@@ -261,6 +272,9 @@ public sealed class SettingsStore
         _baselineJson = json;
         _stamp = StampOf(_path);
         _baselineIds = (settings.Entries ?? []).Select(e => e.Id).ToHashSet();
+        _baselinePrints = new Dictionary<Guid, string>();
+        foreach (var e in settings.Entries ?? [])
+            _baselinePrints.TryAdd(e.Id, SettingsMerge.Fingerprint(e));
     }
 
     private static (long, DateTime)? StampOf(string path)

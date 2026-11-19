@@ -14,6 +14,10 @@ public static class DataFolder
     public const string DayNotesPattern = "day-notes-*.txt";
     public const string AppUsagePattern = "app-usage-*.json";
 
+    /// <summary>Change-log files (<c>journal\*.jsonl</c>, see ChangeJournal); copied with the data, never the session files.</summary>
+    public const string JournalFolderName = "journal";
+    public const string JournalExtension = ".jsonl";
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -175,8 +179,8 @@ public static class DataFolder
         Transfer(fromFolder, toFolder, move: false, nowLocal).Copied;
 
     /// <summary>
-    /// What a folder change copies: <see cref="DataFiles"/>, then the daily snapshots in <c>backups\</c> that the
-    /// target does not already have (as <c>backups\settings-….json</c> relative names).
+    /// What a folder change copies: <see cref="DataFiles"/>, then the daily snapshots in <c>backups\</c> and the
+    /// change-log files in <c>journal\</c> that the target does not already have (as relative names).
     /// </summary>
     public static IReadOnlyList<string> TransferFiles(string fromFolder, string toFolder)
     {
@@ -186,6 +190,17 @@ public static class DataFolder
             var relative = Path.Combine(DailySnapshots.FolderName, Path.GetFileName(path));
             if (!File.Exists(Path.Combine(toFolder, relative)))
                 names.Add(relative);
+        }
+
+        var journal = Path.Combine(fromFolder, JournalFolderName);
+        if (Directory.Exists(journal))
+        {
+            foreach (var name in Matching(journal, "*" + JournalExtension, JournalExtension))
+            {
+                var relative = Path.Combine(JournalFolderName, name);
+                if (!File.Exists(Path.Combine(toFolder, relative)))
+                    names.Add(relative);
+            }
         }
 
         return names;
@@ -266,6 +281,7 @@ public static class DataFolder
             }
 
             DeleteIfEmpty(DailySnapshots.FolderFor(fromFolder));
+            DeleteIfEmpty(Path.Combine(fromFolder, JournalFolderName));
         }
 
         return new TransferResult(names, transaction.BackupNames, removed, notRemoved);

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace TimesheetBuddy.Models;
 
 public sealed class AppSettings
@@ -70,6 +72,10 @@ public sealed class ActiveSession
     public string JobCodeText { get; set; } = string.Empty;
     public string Ticket { get; set; } = string.Empty;
     public DateTime StartedUtc { get; set; }
+
+    /// <summary>Install running this timer; another install's session is not resumed. Empty in older data.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? ClientId { get; set; }
 }
 
 /// <summary>

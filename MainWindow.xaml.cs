@@ -1121,6 +1121,10 @@ public partial class MainWindow : Window
         weeks.Click += (_, _) => OpenWeekBrowser();
         menu.Items.Add(weeks);
 
+        var changeLog = new MenuItem { Header = "Change log…", ToolTip = "Recent changes from every PC using this data folder" };
+        changeLog.Click += (_, _) => new ChangeLogWindow { Owner = this }.ShowDialog();
+        menu.Items.Add(changeLog);
+
         var jobCodes = new MenuItem { Header = "Job code view" };
         jobCodes.Click += (_, _) => OpenJobCodeView();
         menu.Items.Add(jobCodes);
