@@ -17,10 +17,14 @@ public sealed class SettingsStore
     private readonly string _path;
 
     public SettingsStore()
-    {
-        var folder = Path.Combine(
+        : this(Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "TimesheetBuddy");
+            "TimesheetBuddy"))
+    {
+    }
+
+    public SettingsStore(string folder)
+    {
         Directory.CreateDirectory(folder);
         _path = Path.Combine(folder, "settings.json");
     }

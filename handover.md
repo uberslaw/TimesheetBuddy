@@ -26,6 +26,7 @@ TimesheetBuddy/
 │   ├── SettingsStore.cs            # Load/save settings.json
 │   ├── AppState.cs                 # Timer session, entries, settings mutations
 │   ├── UnaccountedTime.cs          # Catch-up overlap: unaccounted minutes vs still-working
+│   ├── NoTaskTime.cs               # "No Task Selected" runs: 1-minute rule, open spans, placement
 │   ├── PromptScheduler.cs          # Recheck + catch-up timers
 │   ├── DayTotals.cs                # Today’s totals, including a live timer
 │   ├── JobCodeViewList.cs          # Visible job-code rows (active codes, or a saved order)
@@ -38,6 +39,7 @@ TimesheetBuddy/
 │   ├── SettingsWindow.*            # Job codes, favorites, categories, prompts
 │   ├── RecheckWindow.*             # “Still working on X?”
 │   ├── FifteenMinuteWindow.*       # Assign unaccounted minutes to active/today/new task
+│   ├── NoTaskAssignWindow.*        # Split pending No Task Selected time across tasks / Break
 │   ├── DayLogWindow.*              # Viewing-day entries + day notes
 │   ├── ManualEntryWindow.*         # Manual add from day log
 │   ├── AddTimeWindow.*             # HH:MM add-time dialog (no live timer)
@@ -80,7 +82,9 @@ Requires [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) on Win
 | Load older timesheet (history mode) | `AppState.ViewingDate` / `IsHistoryMode` + `LoadTimesheetWindow` |
 | Pin / always on top | Pin toggle → `AppState.UpdatePromptSettings` |
 | Start timer from job code / task / Enter | `MainWindow` selection + Start handlers (disabled in history) |
-| Stop timer | Stop button → `AppState.StopActive` |
+| Stop timer | Stop button → `AppState.StopActive` (starts No Task Selected) |
+| No Task Selected timer (starts on any user Stop, ends on any Start; band row + big counter) | `AppState.StopActive` / `StartOrSwitch` + `Services/NoTaskTime` |
+| Assign No Task Selected time (next interval; split across tasks, All to Break, Not now) | `MainWindow.OnFifteenDue` → `Views/NoTaskAssignWindow` → `AppState.AssignNoTaskTime` |
 | Quick-add favorites menu | `MainWindow.QuickAdd_Click` |
 | Menu → Add job code… | `Views/QuickAddJobCodeWindow` → `AppState.AddJobCode` |
 | Settings (codes, favorites, categories, intervals) | `Views/SettingsWindow` |
@@ -96,13 +100,15 @@ Requires [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) on Win
 
 | File | Contents |
 |------|----------|
-| `%LocalAppData%\TimesheetBuddy\settings.json` | Job codes, favorites, categories, prompt prefs, window position, timer widget toggle + position, job-code view order (`jobCodeViewIds`), all time entries, active session |
+| `%LocalAppData%\TimesheetBuddy\settings.json` | Job codes, favorites, categories, prompt prefs, window position, timer widget toggle + position, job-code view order (`jobCodeViewIds`), all time entries, active session, running No Task Selected start (`noTaskStartedUtc`) and pending unassigned spans (`unassignedSegments`) |
 | `%LocalAppData%\TimesheetBuddy\day-notes-yyyyMMdd.txt` | Per-day free-text notes from the day log |
 | `%LocalAppData%\TimesheetBuddy\crash.log` | Unhandled exceptions. Startup failures also show a dialog with this path |
 
 Defaults seed a few job codes (`ADMIN`, `DEV`, `MTG`, `SUP`) and sample favorites on first launch.
 
 Closing the app while a timer is running saves that task onto the current day's list as a finished entry (end time set). It does not resume after restart.
+
+**No Task Selected.** Any user stop (main Stop, job-code view Stop, widget Stop, the still-working dialog's Stop, deleting the running task, loading an older day) starts a "No Task Selected" timer from the same instant; `AppState.StartOrSwitch` from anywhere ends it. Closing the app (`AppState.StopAllForShutdown`) finishes the running task without starting idle time and closes any running idle run into pending; nothing is started on launch, and a running start left in settings.json by a crash is dropped on load (its end is unknown). A run under 1 minute is discarded; 1 minute or more becomes pending. Storage is separate from time entries: `noTaskStartedUtc` (running start, nullable) and `unassignedSegments` (`startUtc` / `endUtc` pairs) in settings.json. Because every total reads `Entries`, unassigned time is never in the band Total, Time Remaining, job-code rows, the job-code view, Today by task, Weeks & export, PDF or Excel. The main window shows it as a muted italic "No Task Selected" row in the band (today's pending plus the running run; not added to Total), and while it runs the big counter shows the idle elapsed time and the status line reads "No Task Selected". Open time is pending plus the running run once it reaches a minute, minus anything an entry already covers (e.g. Add time over that span). On each catch-up interval (same `FifteenMinuteIntervalMinutes` cadence), if open time is at least 1 whole minute, `NoTaskAssignWindow` opens instead of any other catch-up dialog: "{n} minutes were logged as No Task Selected. Where should they go?", with the same rows as the old catch-up grid (task, category, common task/favorite, comment, job code, minutes), Add row, All to Break (`Break` / `Break`, no job code), Not now (stays pending, asked again next interval) and Assign. Minutes must be positive and at most n (whole minutes, rounded down). Assigned entries (`source: "no-task"`) are placed inside the open spans latest first, so they never overlap each other or logged time; the rest stays pending (a leftover under 1 minute is dropped). If idle is running and has reached a minute when you assign, it is closed at now for the assignment and restarts from now. The unaccounted-minutes check treats pending and running idle spans as covered, so the same minutes are never asked about twice, and one tick shows at most one dialog. The screen-lock prompt still only follows a running task. If the catch-up prompt is turned off in Settings, pending time just stays pending and visible. Check: `dotnet run --project tests/NoTaskTimeCheck`.
 
 **Job code view.** Menu → Job code view opens a taller window with one row per code. Click a row to run the timer on that code (the row turns green); Stop ends it for the whole view. Each row shows today’s time for that code, including the live timer, and the footer total is every entry logged today. Add inserts an existing code or creates a code plus description. Remove only changes the saved row list (`AppSettings.JobCodeViewIds`); it does not delete time entries. Until the user adds or removes a row, the view lists the active codes.
 
@@ -147,6 +153,8 @@ Other reasonable next steps if needed:
 8. Close while a timer is running → the task is saved on today's list as a finished entry and does not resume after restart.
 9. Run a task, Stop, run another, then click the first task's row under "Today by task" → it turns green, its total keeps counting, and its segment count goes from 1 to 2. Clicking it again does nothing. Drag the bottom edge to resize; the height comes back after restart.
 10. Start a task and minimize (button, taskbar, Win+M) → the widget appears bottom-right with `code - category`, the task name and a ticking orange counter matching the main one; it does not take focus. Drag it elsewhere, restore, minimize again → same spot. Click it → the main window comes back and the widget hides. Stop the timer and minimize → `Idle` / `No active task` / `00:00:00`. With the widget showing, let a recheck or catch-up prompt fire → main window restores, widget hides, the dialog is on top. Close the app from the taskbar while minimized → the process exits.
+
+11. Start a task, press Stop → status reads "No Task Selected", the big counter restarts from 00:00:00 and a muted italic "No Task Selected" row appears in the band; Total and Time Remaining do not move. Start a task within a minute → the row disappears (discarded). Stop again and wait over a minute, then let the catch-up interval fire → "{n} minutes were logged as No Task Selected…" appears (not the unaccounted dialog). Assign part of it → those minutes appear under Today by task and Total grows; the rest stays in the row. Not now → asked again next interval. All to Break → a Break row appears. Stop a task and close the app → on relaunch nothing is running and the idle time is still pending if it reached a minute.
 
 ## Contact / ownership
 

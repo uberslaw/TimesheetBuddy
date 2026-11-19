@@ -19,10 +19,12 @@ public sealed record DeletedTaskGroup(
 
 public sealed class AppState : INotifyPropertyChanged
 {
+    private const string IdleStatus = "Idle — pick a job code or task to start";
+
     private readonly SettingsStore _store;
     private AppSettings _settings;
     private TimeSpan _elapsed;
-    private string _statusText = "Idle — pick a job code or task to start";
+    private string _statusText = IdleStatus;
     private bool _isRunning;
     private DateTime _viewingDate = DateTime.Today;
 
@@ -30,6 +32,7 @@ public sealed class AppState : INotifyPropertyChanged
     {
         _store = store;
         _settings = store.Load();
+        NormalizeNoTaskOnLoad();
         PurgeExpiredDeletedEntries(persist: true);
         JobCodes = new ObservableCollection<JobCode>(_settings.JobCodes);
         FavoriteTasks = new ObservableCollection<FavoriteTask>(_settings.FavoriteTasks);
@@ -140,11 +143,21 @@ public sealed class AppState : INotifyPropertyChanged
         ? code
         : "—";
 
+    /// <summary>Start of the running "No Task Selected" timer, or null while a task runs or nothing was stopped.</summary>
+    public DateTime? NoTaskStartedUtc => ActiveSession is null ? _settings.NoTaskStartedUtc : null;
+
+    public bool IsNoTaskRunning => NoTaskStartedUtc is not null;
+
+    /// <summary>
+    /// While no task runs, <see cref="Elapsed"/> is the "No Task Selected" timer, so the
+    /// main counter and the widget show it; <see cref="IsRunning"/> stays false.
+    /// </summary>
     public void Tick()
     {
         if (ActiveSession is null)
         {
-            Elapsed = TimeSpan.Zero;
+            var idle = NoTaskStartedUtc is DateTime started ? DateTime.UtcNow - started : TimeSpan.Zero;
+            Elapsed = idle < TimeSpan.Zero ? TimeSpan.Zero : idle;
             IsRunning = false;
             return;
         }
@@ -163,7 +176,7 @@ public sealed class AppState : INotifyPropertyChanged
 
         if (ActiveSession is null)
         {
-            StatusText = "Idle — pick a job code or task to start";
+            StatusText = NotTrackingStatus();
             return;
         }
 
@@ -194,7 +207,9 @@ public sealed class AppState : INotifyPropertyChanged
         if (string.IsNullOrWhiteSpace(taskName) && jobCodeId is null && string.IsNullOrWhiteSpace(jobCodeText))
             return;
 
-        StopActive(save: true);
+        var now = DateTime.UtcNow;
+        StopActive(save: false, startNoTask: false, now);
+        EndNoTask(now);
 
         var name = string.IsNullOrWhiteSpace(taskName)
             ? (string.IsNullOrWhiteSpace(jobCodeText) ? "Untitled task" : jobCodeText.Trim())
@@ -203,7 +218,7 @@ public sealed class AppState : INotifyPropertyChanged
 
         var entry = new TimeEntry
         {
-            StartUtc = DateTime.UtcNow,
+            StartUtc = now,
             TaskName = name,
             Category = string.IsNullOrWhiteSpace(category) ? "General" : category.Trim(),
             JobCodeId = jobCodeId,
@@ -228,22 +243,119 @@ public sealed class AppState : INotifyPropertyChanged
         StatusText = $"Tracking: {name}";
     }
 
-    public void StopActive(bool save)
+    /// <summary>
+    /// A user stop: ends the running task and starts the "No Task Selected" timer from the same moment.
+    /// </summary>
+    public void StopActive(bool save) => StopActive(save, startNoTask: true, DateTime.UtcNow);
+
+    /// <summary>
+    /// App close: finishes a running task and any running "No Task Selected" time (kept when it
+    /// reached a minute) without starting new idle time, so nothing resumes on the next launch.
+    /// </summary>
+    public void StopAllForShutdown()
+    {
+        var now = DateTime.UtcNow;
+        StopActive(save: false, startNoTask: false, now);
+        EndNoTask(now);
+        Persist();
+    }
+
+    private void StopActive(bool save, bool startNoTask, DateTime nowUtc)
     {
         if (ActiveSession is null) return;
 
         var entry = _settings.Entries.FirstOrDefault(e => e.Id == ActiveSession.EntryId);
         if (entry is not null && entry.EndUtc is null)
-            entry.EndUtc = DateTime.UtcNow;
+            entry.EndUtc = nowUtc;
 
+        if (startNoTask)
+            _settings.NoTaskStartedUtc ??= nowUtc;
         ActiveSession = null;
-        Elapsed = TimeSpan.Zero;
-        IsRunning = false;
-        StatusText = IsHistoryMode
-            ? ViewingDateLabel
-            : "Idle — pick a job code or task to start";
+        OnPropertyChanged(nameof(IsNoTaskRunning));
+        Tick();
+        StatusText = NotTrackingStatus();
         RefreshToday();
         if (save) Persist();
+    }
+
+    /// <summary>Closes the running "No Task Selected" time; a run under a minute is dropped.</summary>
+    private void EndNoTask(DateTime nowUtc)
+    {
+        if (_settings.NoTaskStartedUtc is null) return;
+
+        NoTaskTime.Close(_settings.UnassignedSegments, _settings.NoTaskStartedUtc, nowUtc);
+        _settings.NoTaskStartedUtc = null;
+        OnPropertyChanged(nameof(IsNoTaskRunning));
+    }
+
+    /// <summary>Unassigned time on offer in the assignment dialog (pending, plus the running run once it reaches a minute).</summary>
+    public IReadOnlyList<UtcInterval> OpenNoTaskTime(DateTime? nowUtc = null) =>
+        NoTaskTime.Open(
+            _settings.UnassignedSegments,
+            NoTaskStartedUtc,
+            _settings.Entries,
+            nowUtc ?? DateTime.UtcNow);
+
+    /// <summary>"No Task Selected" time on a day, including the running timer from its first second.</summary>
+    public TimeSpan NoTaskTotalForDay(DateTime dayLocal, DateTime nowUtc) =>
+        NoTaskTime.TotalForDay(
+            NoTaskTime.Open(
+                _settings.UnassignedSegments,
+                NoTaskStartedUtc,
+                _settings.Entries,
+                nowUtc,
+                includeShortRun: true),
+            dayLocal);
+
+    /// <summary>
+    /// Logs the slices inside the unassigned spans (latest first) and removes that time from
+    /// pending. A running "No Task Selected" timer of a minute or more is closed at now first and
+    /// restarts from now. Returns null on success, otherwise why nothing was saved.
+    /// </summary>
+    public string? AssignNoTaskTime(IReadOnlyList<CatchUpSlice> slices)
+    {
+        var now = DateTime.UtcNow;
+        if (NoTaskStartedUtc is DateTime started && now - started >= NoTaskTime.MinimumRun)
+        {
+            NoTaskTime.Close(_settings.UnassignedSegments, started, now);
+            _settings.NoTaskStartedUtc = now;
+        }
+
+        var open = NoTaskTime.Open(_settings.UnassignedSegments, null, _settings.Entries, now);
+        var error = NoTaskTime.Validate(slices, open);
+        if (error is not null)
+        {
+            Persist();
+            return error;
+        }
+
+        _settings.Entries.AddRange(NoTaskTime.Place(slices, open));
+        _settings.UnassignedSegments = NoTaskTime.Remaining(_settings.UnassignedSegments, _settings.Entries, now);
+        Tick();
+        RefreshToday();
+        Persist();
+        return null;
+    }
+
+    private string NotTrackingStatus()
+    {
+        if (IsHistoryMode) return ViewingDateLabel;
+        return NoTaskStartedUtc is null ? IdleStatus : NoTaskTime.Label;
+    }
+
+    /// <summary>
+    /// A "No Task Selected" start still saved here means the app did not close normally; its end
+    /// is unknown, so it is dropped rather than resumed. Malformed segments are dropped too.
+    /// </summary>
+    private void NormalizeNoTaskOnLoad()
+    {
+        _settings.UnassignedSegments ??= [];
+        var before = _settings.UnassignedSegments.Count;
+        _settings.UnassignedSegments.RemoveAll(s => s is null || s.EndUtc <= s.StartUtc);
+        var changed = before != _settings.UnassignedSegments.Count || _settings.NoTaskStartedUtc is not null;
+        _settings.NoTaskStartedUtc = null;
+        if (changed)
+            _store.Save(_settings);
     }
 
     public void AddFifteenMinuteRows(IEnumerable<TimeEntry> rows)
@@ -268,12 +380,20 @@ public sealed class AppState : INotifyPropertyChanged
         Persist();
     }
 
-    public UnaccountedWindow MeasureCatchUpWindow(DateTime? nowUtc = null) =>
-        UnaccountedTime.Measure(
+    /// <summary>
+    /// Pending and running "No Task Selected" time counts as known here: it has its own
+    /// dialog, so the unaccounted-minutes dialog never asks about the same minutes.
+    /// </summary>
+    public UnaccountedWindow MeasureCatchUpWindow(DateTime? nowUtc = null)
+    {
+        var now = nowUtc ?? DateTime.UtcNow;
+        return UnaccountedTime.Measure(
             _settings.Entries,
             ActiveSession,
             CatchUpIntervalMinutes,
-            nowUtc ?? DateTime.UtcNow);
+            now,
+            NoTaskTime.Spans(_settings.UnassignedSegments, NoTaskStartedUtc, now));
+    }
 
     public void AddCatchUpAssignments(IReadOnlyList<CatchUpSlice> slices, UnaccountedWindow window) =>
         AddFifteenMinuteRows(UnaccountedTime.Place(slices, window));
@@ -358,7 +478,7 @@ public sealed class AppState : INotifyPropertyChanged
     {
         ViewingDate = DateTime.Today;
         StatusText = ActiveSession is null
-            ? "Idle — pick a job code or task to start"
+            ? NotTrackingStatus()
             : $"Tracking: {ActiveTaskLabel}";
         RefreshToday();
     }
@@ -427,7 +547,7 @@ public sealed class AppState : INotifyPropertyChanged
             ActiveSession = result.ActiveSession;
             Tick();
             StatusText = ActiveSession is null
-                ? (IsHistoryMode ? ViewingDateLabel : "Idle — pick a job code or task to start")
+                ? NotTrackingStatus()
                 : $"Tracking: {ActiveTaskLabel}";
         }
 

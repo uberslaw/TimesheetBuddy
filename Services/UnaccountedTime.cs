@@ -8,7 +8,8 @@ namespace TimesheetBuddy.Services;
 /// </summary>
 /// <remarks>
 /// Window is [now − X minutes, now] as UTC instants (the same moment as local now).
-/// Accounted time is the union of each stored entry's overlap with that window.
+/// Accounted time is the union of each stored entry's overlap with that window, plus any
+/// spans passed as already known (pending or running "No Task Selected" time, which has its own prompt).
 /// A running timer is included once, from the earlier of the entry start and the
 /// session start through now (the current elapsed value). That open entry is not
 /// added a second time from <see cref="ActiveSession"/>.
@@ -28,7 +29,8 @@ public static class UnaccountedTime
         IEnumerable<TimeEntry>? entries,
         ActiveSession? activeSession,
         int windowMinutes,
-        DateTime nowUtc)
+        DateTime nowUtc,
+        IEnumerable<UtcInterval>? alsoCovered = null)
     {
         nowUtc = AsUtc(nowUtc);
         if (windowMinutes <= 0)
@@ -63,6 +65,9 @@ public static class UnaccountedTime
 
         if (activeSession is not null && !activeIncluded)
             AddClipped(covered, AsUtc(activeSession.StartedUtc), nowUtc, windowStart, windowEnd);
+
+        foreach (var span in alsoCovered ?? [])
+            AddClipped(covered, AsUtc(span.StartUtc), AsUtc(span.EndUtc), windowStart, windowEnd);
 
         var merged = Merge(covered);
         var accounted = TimeSpan.Zero;

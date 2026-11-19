@@ -210,7 +210,15 @@ public partial class MainWindow : Window
     private void RefreshDayCodeTotals()
     {
         var day = _state.ViewingDate;
-        var rows = DayTotals.ByJobCodeForDay(_state.Settings.Entries, day, DateTime.UtcNow);
+        var now = DateTime.UtcNow;
+        var rows = DayTotals.ByJobCodeForDay(_state.Settings.Entries, day, now);
+
+        // Shown beside the code rows but never added to Total or Time Remaining.
+        var noTask = _state.NoTaskTotalForDay(day, now);
+        var showNoTask = noTask > TimeSpan.Zero || (!_state.IsHistoryMode && _state.IsNoTaskRunning);
+        NoTaskRow.Visibility = showNoTask ? Visibility.Visible : Visibility.Collapsed;
+        NoTaskTotalText.Text = DayTotals.FormatClock(noTask);
+
         _dayCodeRows.Clear();
         var grand = TimeSpan.Zero;
         foreach (var row in rows)
@@ -219,7 +227,7 @@ public partial class MainWindow : Window
             _dayCodeRows.Add(new DayCodeTotalRowModel(row.Label, DayTotals.FormatClock(row.Total)));
         }
 
-        DayCodeEmptyText.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        DayCodeEmptyText.Visibility = rows.Count == 0 && !showNoTask ? Visibility.Visible : Visibility.Collapsed;
         DayGrandTotalText.Text = DayTotals.FormatClock(grand);
         DayRemainingText.Text = DayTotals.FormatClockHm(DayTotals.TimeRemaining(grand));
         DayTotalsPanel.ToolTip = _state.IsHistoryMode
@@ -1042,6 +1050,14 @@ public partial class MainWindow : Window
             if (_state.IsHistoryMode) return;
             if (_scheduler.FifteenOpen || _scheduler.RecheckOpen) return;
 
+            // One dialog per tick. Pending idle time wins; the unaccounted check treats it as known.
+            var noTask = _state.OpenNoTaskTime();
+            if (NoTaskTime.ShouldPrompt(noTask))
+            {
+                ShowAssignNoTask(noTask);
+                return;
+            }
+
             var gap = _state.MeasureCatchUpWindow();
             switch (UnaccountedTime.Decide(gap, _state.ActiveSession is not null))
             {
@@ -1073,6 +1089,27 @@ public partial class MainWindow : Window
             _scheduler.FifteenOpen = false;
             _scheduler.ResetFifteen();
             _scheduler.ResetRecheckIfDue();
+        }
+    }
+
+    private void ShowAssignNoTask(IReadOnlyList<UtcInterval> open)
+    {
+        _scheduler.FifteenOpen = true;
+        try
+        {
+            EnsureVisibleForPrompt();
+            var win = new NoTaskAssignWindow(open) { Owner = this };
+            if (win.ShowDialog() == true)
+                QueueTaskRebuild();
+        }
+        finally
+        {
+            Topmost = _state.Settings.AlwaysOnTop;
+            _scheduler.FifteenOpen = false;
+            _scheduler.ResetFifteen();
+            _scheduler.ResetRecheckIfDue();
+            BindStatus();
+            RefreshDayCodeTotals();
         }
     }
 
@@ -1172,14 +1209,11 @@ public partial class MainWindow : Window
         _widget?.Close();
         _widget = null;
 
-        // A normal close finishes a running timer onto today's list.
-        // The open entry gets EndUtc and ActiveSession is cleared, so it
-        // does not resume as an active session on the next launch.
-        if (_state.ActiveSession is not null)
-        {
-            _state.StopActive(save: true);
-            _scheduler.OnSessionChanged();
-        }
+        // A normal close finishes a running timer onto today's list and closes any running
+        // No Task Selected time into pending, without starting new idle time. Neither
+        // resumes on the next launch.
+        _state.StopAllForShutdown();
+        _scheduler.OnSessionChanged();
 
         SavePlacement();
         _state.Persist();

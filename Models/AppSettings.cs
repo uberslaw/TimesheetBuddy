@@ -27,6 +27,12 @@ public sealed class AppSettings
     public List<TimeEntry> Entries { get; set; } = [];
     public ActiveSession? ActiveSession { get; set; }
 
+    /// <summary>Start of the running "No Task Selected" timer; null when a task runs or nothing was stopped.</summary>
+    public DateTime? NoTaskStartedUtc { get; set; }
+
+    /// <summary>Finished "No Task Selected" time (1 minute or more each) not yet assigned to a task.</summary>
+    public List<UnassignedSegment> UnassignedSegments { get; set; } = [];
+
     /// <summary>
     /// Ordered job-code ids shown in the job-code view.
     /// Null means the view has not been customized and should list active codes.
@@ -42,4 +48,14 @@ public sealed class ActiveSession
     public Guid? JobCodeId { get; set; }
     public string JobCodeText { get; set; } = string.Empty;
     public DateTime StartedUtc { get; set; }
+}
+
+/// <summary>
+/// A finished "No Task Selected" run of at least a minute, waiting to be assigned to a task.
+/// Kept apart from <see cref="AppSettings.Entries"/> so it never counts as logged work.
+/// </summary>
+public sealed class UnassignedSegment
+{
+    public DateTime StartUtc { get; set; }
+    public DateTime EndUtc { get; set; }
 }

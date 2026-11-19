@@ -1,0 +1,193 @@
+using TimesheetBuddy.Models;
+using TimesheetBuddy.Services;
+
+var failures = new List<string>();
+
+void Check(bool condition, string message)
+{
+    if (condition)
+    {
+        Console.WriteLine("PASS  " + message);
+        return;
+    }
+
+    failures.Add(message);
+    Console.WriteLine("FAIL  " + message);
+}
+
+var folder = Path.Combine(Path.GetTempPath(), "TimesheetBuddyNoTaskCheck-" + Guid.NewGuid().ToString("N"));
+AppState NewState() => new(new SettingsStore(folder));
+static DateTime Utc(int h, int m, int s = 0) => new(2026, 11, 18, h, m, s, DateTimeKind.Utc);
+static bool Overlaps(DateTime aStart, DateTime aEnd, DateTime bStart, DateTime bEnd) => aStart < bEnd && bStart < aEnd;
+
+try
+{
+    // Launch: nothing runs.
+    var state = NewState();
+    Check(!state.IsNoTaskRunning && state.Settings.UnassignedSegments.Count == 0, "launch does not start No Task Selected");
+
+    // A user stop starts No Task Selected at the stop moment.
+    state.StartOrSwitch("Feature work", "Development", null, "DEV");
+    var first = state.Settings.Entries.Single();
+    state.StopActive(save: true);
+    Check(state.IsNoTaskRunning, "stop starts No Task Selected");
+    Check(state.NoTaskStartedUtc == first.EndUtc, "No Task Selected starts when the task ended");
+    Check(state.StatusText == NoTaskTime.Label, "status reads No Task Selected");
+    state.Tick();
+    Check(state.ElapsedDisplay == "00:00:00", "counter shows the idle elapsed time");
+
+    // Start under a minute later: idle ends and is dropped.
+    state.StartOrSwitch("Feature work", "Development", null, "DEV");
+    Check(!state.IsNoTaskRunning, "start ends No Task Selected");
+    Check(state.Settings.UnassignedSegments.Count == 0, "a run under 1 minute is discarded");
+
+    // A run of 1 minute or more stays pending.
+    state.StopActive(save: true);
+    state.Settings.NoTaskStartedUtc = DateTime.UtcNow.AddMinutes(-5);
+    state.Tick();
+    Check(state.Elapsed >= TimeSpan.FromMinutes(5), "counter follows the running idle time");
+    state.StartOrSwitch("Email", "Admin", null, "ADMIN");
+    Check(state.Settings.UnassignedSegments.Count == 1, "a run of 1 minute or more is kept as pending");
+    var pendingSegment = state.Settings.UnassignedSegments[0];
+    Check(Math.Abs((pendingSegment.EndUtc - pendingSegment.StartUtc).TotalMinutes - 5) < 0.1, "pending keeps the run's span");
+    Check(state.Settings.Entries.All(e => e.TaskName != NoTaskTime.Label), "unassigned time is not stored as an entry");
+
+    // Closing the app finishes the task and does not start idle.
+    state.StopAllForShutdown();
+    Check(state.ActiveSession is null && !state.IsNoTaskRunning, "close does not start No Task Selected");
+    Check(state.Settings.Entries.All(e => e.EndUtc is not null), "close finishes the running task");
+
+    // Idle running at close is finished, saved and not resumed.
+    var reopened = NewState();
+    reopened.StartOrSwitch("Email", "Admin", null, "ADMIN");
+    reopened.StopActive(save: true);
+    reopened.Settings.NoTaskStartedUtc = DateTime.UtcNow.AddMinutes(-3);
+    var before = reopened.Settings.UnassignedSegments.Count;
+    reopened.StopAllForShutdown();
+    Check(reopened.Settings.UnassignedSegments.Count == before + 1 && reopened.Settings.NoTaskStartedUtc is null,
+        "idle running at close is closed into pending");
+    var afterRestart = NewState();
+    Check(!afterRestart.IsNoTaskRunning, "idle does not resume after restart");
+    Check(afterRestart.Settings.UnassignedSegments.Count == before + 1, "pending idle survives a restart");
+
+    // A start left behind by a crash is dropped on load.
+    afterRestart.Settings.NoTaskStartedUtc = DateTime.UtcNow.AddHours(-2);
+    afterRestart.Persist();
+    var crashed = NewState();
+    Check(!crashed.IsNoTaskRunning && crashed.Settings.UnassignedSegments.Count == before + 1,
+        "a leftover running idle start is not resumed");
+    var json = File.ReadAllText(Path.Combine(folder, "settings.json"));
+    Check(!json.Contains("NaN", StringComparison.Ordinal), "settings.json has no NaN");
+
+    // Totals, the task list, week summaries (and so exports) exclude unassigned time.
+    var now = DateTime.UtcNow;
+    var today = DateTime.Today;
+    var dayTotal = DayTotals.ForDay(crashed.EntriesForDay(today), now);
+    var byCode = DayTotals.ByJobCodeForDay(crashed.Settings.Entries, today, now);
+    var rows = TaskTypeSummary.Build(crashed.Settings.Entries, today, now);
+    var weeks = WeekCalendar.Collect(crashed.Settings.Entries, DateTime.Now, now);
+    Check(crashed.NoTaskTotalForDay(today, now) >= TimeSpan.FromMinutes(4.9), "No Task Selected row has today's pending time");
+    Check(dayTotal < TimeSpan.FromMinutes(1), "band total excludes unassigned time");
+    Check(byCode.All(r => r.Label != NoTaskTime.Label) && byCode.Sum(r => r.Total.TotalSeconds) < 60, "job-code totals exclude unassigned time");
+    Check(rows.All(r => r.TaskName != NoTaskTime.Label), "Today by task has no No Task Selected row");
+    Check(weeks.Sum(w => w.Total.TotalSeconds) < 60 &&
+          weeks.SelectMany(w => w.Days).SelectMany(d => d.Tasks).All(t => t.TaskName != NoTaskTime.Label),
+        "week summaries and exports exclude unassigned time");
+    Check(DayTotals.TimeRemaining(dayTotal) > TimeSpan.FromHours(7.4), "time remaining ignores unassigned time");
+
+    // Catch-up: pending and running idle count as known, so nothing is asked twice.
+    var catchUp = NewState();
+    catchUp.Settings.Entries.Clear();
+    catchUp.Settings.UnassignedSegments.Clear();
+    catchUp.StartOrSwitch("Email", "Admin", null, "ADMIN");
+    catchUp.StopActive(save: true);
+    catchUp.Settings.Entries.Clear();
+    catchUp.Settings.NoTaskStartedUtc = DateTime.UtcNow.AddMinutes(-(catchUp.CatchUpIntervalMinutes + 5));
+    Check(catchUp.MeasureCatchUpWindow().UnaccountedMinutes == 0, "running idle is not unaccounted time");
+    Check(NoTaskTime.ShouldPrompt(catchUp.OpenNoTaskTime()), "running idle of a minute or more prompts");
+    catchUp.Settings.NoTaskStartedUtc = DateTime.UtcNow.AddSeconds(-40);
+    Check(!NoTaskTime.ShouldPrompt(catchUp.OpenNoTaskTime()), "running idle under a minute does not prompt");
+
+    // Pure placement: inside the idle spans, latest first, never over logged time.
+    var pending = new List<UnassignedSegment>
+    {
+        new() { StartUtc = Utc(9, 0), EndUtc = Utc(9, 10) },
+        new() { StartUtc = Utc(9, 20), EndUtc = Utc(9, 30) }
+    };
+    var logged = new List<TimeEntry>
+    {
+        new() { StartUtc = Utc(9, 25), EndUtc = Utc(9, 27), TaskName = "Added time", ManualMinutes = 2 }
+    };
+    var open = NoTaskTime.Open(pending, null, logged, Utc(10, 0));
+    Check(NoTaskTime.WholeMinutes(NoTaskTime.Total(open)) == 18, "logged time inside an idle span is not offered again");
+    CatchUpSlice[] slices =
+    [
+        new() { TaskName = "A", Category = "General", Minutes = 6 },
+        new() { TaskName = "B", Category = "General", Minutes = 4 }
+    ];
+    Check(NoTaskTime.Validate(slices, open) is null, "10 of 18 minutes is valid");
+    var placed = NoTaskTime.Place(slices, open);
+    Check(placed.All(p => open.Any(s => p.StartUtc >= s.StartUtc && p.EndUtc <= s.EndUtc)), "assigned minutes land inside idle spans");
+    var allBlocks = placed.Concat(logged).ToList();
+    var overlap = false;
+    for (var i = 0; i < allBlocks.Count; i++)
+        for (var j = i + 1; j < allBlocks.Count; j++)
+            overlap |= Overlaps(allBlocks[i].StartUtc, allBlocks[i].EndUtc!.Value, allBlocks[j].StartUtc, allBlocks[j].EndUtc!.Value);
+    Check(!overlap, "assigned minutes do not overlap each other or existing entries");
+    Check(placed.Where(p => p.TaskName == "A").Sum(p => p.ManualMinutes) == 6 &&
+          placed.Where(p => p.TaskName == "B").Sum(p => p.ManualMinutes) == 4, "each task gets its minutes");
+    Check(placed.Where(p => p.TaskName == "A").Max(p => p.EndUtc) == Utc(9, 30), "first slice sits closest to now");
+    Check(placed.All(p => p.Source == NoTaskTime.AssignedSource), "assigned entries are marked");
+    var left = NoTaskTime.Remaining(pending, logged.Concat(placed), Utc(10, 0));
+    Check(left.Count == 1 && left[0].StartUtc == Utc(9, 0) && left[0].EndUtc == Utc(9, 8), "partial assignment leaves the earliest 8 minutes pending");
+    Check(NoTaskTime.Validate([new CatchUpSlice { TaskName = "A", Minutes = 19 }], open) is not null, "more than pending is rejected");
+    Check(NoTaskTime.Validate([new CatchUpSlice { TaskName = "A", Minutes = 0 }], open) is not null, "zero minutes is rejected");
+
+    var withSeconds = new List<UnassignedSegment> { new() { StartUtc = Utc(9, 0), EndUtc = Utc(9, 5, 40) } };
+    var openSeconds = NoTaskTime.Open(withSeconds, null, [], Utc(10, 0));
+    var allPlaced = NoTaskTime.Place([new CatchUpSlice { TaskName = "A", Minutes = 5 }], openSeconds);
+    Check(NoTaskTime.Remaining(withSeconds, allPlaced, Utc(10, 0)).Count == 0, "assigning every whole minute clears the seconds left over");
+
+    // AppState: partial assignment, rejection, and a running idle timer.
+    var assign = NewState();
+    assign.Settings.Entries.Clear();
+    assign.Settings.UnassignedSegments.Clear();
+    var nowUtc = DateTime.UtcNow;
+    assign.Settings.UnassignedSegments.Add(new UnassignedSegment { StartUtc = nowUtc.AddMinutes(-60), EndUtc = nowUtc.AddMinutes(-40) });
+    var error = assign.AssignNoTaskTime([new CatchUpSlice { TaskName = "A", Minutes = 21 }]);
+    Check(error is not null && assign.Settings.Entries.Count == 0 && assign.Settings.UnassignedSegments.Count == 1,
+        "an over-assignment saves nothing");
+    error = assign.AssignNoTaskTime(
+    [
+        new CatchUpSlice { TaskName = "A", Category = "General", Minutes = 5 },
+        new CatchUpSlice { TaskName = LockIntervalSplit.BreakTaskName, Category = LockIntervalSplit.BreakCategory, Minutes = 3 }
+    ]);
+    Check(error is null, "a valid split is saved");
+    Check(NoTaskTime.WholeMinutes(NoTaskTime.Total(assign.OpenNoTaskTime())) == 12, "the rest stays pending");
+    var breakEntry = assign.Settings.Entries.Single(e => e.TaskName == "Break");
+    Check(breakEntry.Category == "Break" && breakEntry.JobCodeId is null && breakEntry.JobCodeText.Length == 0, "Break has no job code");
+    Check(DayTotals.ForDay(assign.Settings.Entries, DateTime.UtcNow) == TimeSpan.FromMinutes(8), "assigned minutes now count as logged");
+
+    assign.Settings.UnassignedSegments.Clear();
+    assign.StartOrSwitch("Email", "Admin", null, "ADMIN");
+    assign.StopActive(save: true);
+    assign.Settings.NoTaskStartedUtc = DateTime.UtcNow.AddMinutes(-10);
+    error = assign.AssignNoTaskTime([new CatchUpSlice { TaskName = "A", Minutes = 4 }]);
+    Check(error is null, "running idle can be assigned");
+    Check(assign.IsNoTaskRunning && DateTime.UtcNow - assign.NoTaskStartedUtc!.Value < TimeSpan.FromSeconds(5),
+        "idle restarts from now after assigning");
+    Check(NoTaskTime.WholeMinutes(NoTaskTime.Total(assign.OpenNoTaskTime())) == 5, "the unassigned rest of the closed run stays pending");
+}
+finally
+{
+    try { Directory.Delete(folder, recursive: true); } catch { }
+}
+
+if (failures.Count == 0)
+{
+    Console.WriteLine("All No Task Selected checks passed.");
+    return 0;
+}
+
+Console.WriteLine($"{failures.Count} check(s) failed.");
+return 1;
