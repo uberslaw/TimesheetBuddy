@@ -1107,6 +1107,10 @@ public partial class MainWindow : Window
         appTrack.Click += (_, _) => App.SetAppTrack(appTrack.IsChecked);
         menu.Items.Add(appTrack);
 
+        var appUsage = new MenuItem { Header = "App usage…" };
+        appUsage.Click += (_, _) => new AppUsageWindow { Owner = this }.ShowDialog();
+        menu.Items.Add(appUsage);
+
         menu.Items.Add(new Separator());
 
         var dayLog = new MenuItem { Header = "Day log…" };
