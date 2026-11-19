@@ -23,6 +23,7 @@
     <Compile Include="..\..\Services\DayTotals.cs" Link="DayTotals.cs" />
     <Compile Include="..\..\Services\TaskTypeSummary.cs" Link="TaskTypeSummary.cs" />
     <Compile Include="..\..\Services\TaskTypeReassign.cs" Link="TaskTypeReassign.cs" />
+    <Compile Include="..\..\Services\RowTimeEdit.cs" Link="RowTimeEdit.cs" />
     <Compile Include="..\..\Services\LockIntervalSplit.cs" Link="LockIntervalSplit.cs" />
   </ItemGroup>
 

@@ -319,7 +319,7 @@
                                                 ContextMenuOpening="TaskRow_ContextMenuOpening">
                                             <Border.ContextMenu>
                                                 <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-                                                    <MenuItem Header="Add time…" Click="AddTimeMenu_Click"
+                                                    <MenuItem Header="Modify Time…" Click="ModifyTimeMenu_Click"
                                                               CommandParameter="{Binding}"/>
                                                     <MenuItem x:Name="StartOrContinueItem"
                                                               Header="Start timer"

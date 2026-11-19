@@ -474,19 +474,61 @@ public partial class MainWindow : Window
     {
         var dialog = new AddTimeWindow(row.TaskName) { Owner = this };
         if (dialog.ShowDialog() != true) return;
+        AddTimeToRow(row, dialog.SelectedDuration);
+    }
 
+    private void AddTimeToRow(TaskTypeRowModel row, TimeSpan duration)
+    {
         var code = _state.FindJobCode(row.JobCodeId);
         _state.AddTimeToTaskType(
             row.TaskName,
             row.Category,
             row.JobCodeId,
             code?.Display ?? row.JobCodeText,
-            dialog.SelectedDuration);
+            duration);
 
         row.IsExpanded = true;
         _expandedKeys.Add(row.Key);
         QueueTaskRebuild();
-        StatusText.Text = $"Added {FormatShortDuration(dialog.SelectedDuration)} to {row.TaskName}";
+        StatusText.Text = $"Added {FormatShortDuration(duration)} to {row.TaskName}";
+    }
+
+    private void PromptModifyTime(TaskTypeRowModel row)
+    {
+        var current = TaskTypeSummary.Build(_state.Settings.Entries, _state.ViewingDate, DateTime.UtcNow)
+            .FirstOrDefault(r => r.Key == row.Key);
+        if (current is null)
+        {
+            MessageBox.Show(this, "That task no longer has time on this day.", "Modify time",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var codeLabel = JobCode.FormatLabelFromStored(row.JobCodeText);
+        var dialog = new ModifyTimeWindow(
+            row.TaskName,
+            codeLabel == "—" ? "No job code" : codeLabel,
+            current.Total,
+            _state.RemovableTimeForTaskType(row.Key))
+        { Owner = this };
+        if (dialog.ShowDialog() != true) return;
+
+        if (!dialog.IsRemove)
+        {
+            AddTimeToRow(row, dialog.SelectedDuration);
+            return;
+        }
+
+        var error = _state.RemoveTimeFromTaskType(row.Key, dialog.SelectedDuration);
+        if (error is not null)
+        {
+            MessageBox.Show(this, error, "Modify time", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        QueueTaskRebuild();
+        RefreshDayCodeTotals();
+        StatusText.Text = $"Removed {FormatShortDuration(dialog.SelectedDuration)} from {row.TaskName}";
     }
 
     private void ExpandToggle_Click(object sender, RoutedEventArgs e)
@@ -527,10 +569,10 @@ public partial class MainWindow : Window
         }
     }
 
-    private void AddTimeMenu_Click(object sender, RoutedEventArgs e)
+    private void ModifyTimeMenu_Click(object sender, RoutedEventArgs e)
     {
         if (!TryGetMenuRow(sender, out var row)) return;
-        PromptAddTime(row);
+        PromptModifyTime(row);
     }
 
     private void StartTaskMenu_Click(object sender, RoutedEventArgs e)

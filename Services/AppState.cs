@@ -448,6 +448,27 @@ public sealed class AppState : INotifyPropertyChanged
         Persist();
     }
 
+    /// <summary>Finished time on a task-type row of <see cref="ViewingDate"/> that Remove may take.</summary>
+    public TimeSpan RemovableTimeForTaskType(string key) =>
+        RowTimeEdit.RemovableTime(
+            RowTimeEdit.RowEntries(_settings.Entries, ViewingDate, key),
+            ActiveSession?.EntryId);
+
+    /// <summary>
+    /// Takes time off a task-type row on <see cref="ViewingDate"/>, newest finished segment first;
+    /// the running timer is untouched. Returns null on success, otherwise why nothing changed.
+    /// </summary>
+    public string? RemoveTimeFromTaskType(string key, TimeSpan amount)
+    {
+        var result = RowTimeEdit.Remove(_settings.Entries, ViewingDate, key, ActiveSession?.EntryId, amount);
+        if (!result.Applied)
+            return result.Error ?? "Could not remove that time.";
+
+        RefreshToday();
+        Persist();
+        return null;
+    }
+
     public void EnterHistoryMode(DateTime dayLocal)
     {
         var day = dayLocal.Date;
