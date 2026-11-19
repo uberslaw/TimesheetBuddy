@@ -11,8 +11,9 @@ A compact always-on-top WPF (.NET 10) timesheet helper for tracking time against
 - **Still-working recheck** popup that asks if you are still on the active task, with hours/minutes until the next check
 - **Catch-up popup** (“What have you done for the last 15 minutes?”) that stays until you respond — add rows with comments, job codes, minutes, and common tasks
 - **Day log** with today’s entries plus a free-form notes area
+- **App Track** (optional, off by default): tick **Menu → App Track** to log how long each program is in the foreground, by program name only (never window titles, web pages, documents or email). It pauses after 5 minutes without input and while the screen is locked. **Menu → App usage…** shows each day's programs with time and percentage. It is kept apart from your timesheet and never appears in totals or exports.
 
-Data is stored locally in `%LocalAppData%\TimesheetBuddy\` (`settings.json` plus `day-notes-*.txt`). To keep it somewhere else (another drive, a synced folder), use **Menu → Settings… → Data → Browse…**; your data is copied there and the old copy is left in place. The crash log always stays in `%LocalAppData%\TimesheetBuddy\`.
+Data is stored locally in `%LocalAppData%\TimesheetBuddy\` (`settings.json` plus `day-notes-*.txt` and, with App Track on, `app-usage-*.json`). To keep it somewhere else (another drive, a synced folder), use **Menu → Settings… → Data → Browse…**; your data is copied there and the old copy is left in place. The crash log always stays in `%LocalAppData%\TimesheetBuddy\`.
 
 ## Requirements
 
@@ -37,6 +38,7 @@ Or open `TimesheetBuddy/TimesheetBuddy.csproj` in Visual Studio 2022+/2026 and p
 3. Use **+ Quick add** for favorite tasks.
 4. Open **Menu → Settings…** to edit job codes, favorites, categories, and prompt intervals.
 5. Open **Menu → Day log…** for today’s log and day notes; **Add manual** there adds a manual entry.
+   **Menu → App Track** (the first item) switches program tracking on or off; **App usage…** below it shows the results.
 6. When the recheck or 15-minute popup appears, answer it — the catch-up window will not dismiss until you save.
 
 ## Notes
