@@ -68,13 +68,7 @@
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                     <Button x:Name="AppMenuButton" Style="{StaticResource GhostButton}" Content="Menu"
-                            ToolTip="Weeks, export, job code view, and settings" Click="Menu_Click" FontSize="12" Padding="6,0"/>
-                    <Button Style="{StaticResource GhostButton}" Content="+" ToolTip="Add manual entry"
-                            Click="AddManual_Click" FontSize="16" FontWeight="SemiBold" Padding="8,0"/>
-                    <Button Style="{StaticResource GhostButton}" Content="⚙" ToolTip="Settings"
-                            Click="Settings_Click" FontSize="14" Padding="6,0"/>
-                    <Button Style="{StaticResource GhostButton}" Content="⏱" ToolTip="Day log"
-                            Click="DayLog_Click" FontSize="14" Padding="6,0"/>
+                            ToolTip="Day log, weeks and export, job code view, settings and more" Click="Menu_Click" FontSize="12" Padding="6,0"/>
                     <Button Style="{StaticResource GhostButton}" Content="—" ToolTip="Minimize"
                             Click="Minimize_Click" FontSize="14" Padding="6,0"/>
                     <Button Style="{StaticResource GhostButton}" Content="✕" ToolTip="Close"

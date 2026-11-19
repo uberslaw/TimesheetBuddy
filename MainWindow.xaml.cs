@@ -1076,8 +1076,6 @@ public partial class MainWindow : Window
         StatusText.Text = $"Added {FormatShortDuration(dialog.SelectedDuration)} to {fav.Name}";
     }
 
-    private void Settings_Click(object sender, RoutedEventArgs e) => OpenSettings(false);
-
     private void OpenSettings(bool focusFavorites)
     {
         var win = new SettingsWindow(focusFavorites) { Owner = this };
@@ -1087,7 +1085,7 @@ public partial class MainWindow : Window
         PinToggle.IsChecked = _state.Settings.AlwaysOnTop;
     }
 
-    private void DayLog_Click(object sender, RoutedEventArgs e)
+    private void OpenDayLog()
     {
         var win = new DayLogWindow(_state.ViewingDate) { Owner = this };
         win.ShowDialog();
@@ -1098,6 +1096,10 @@ public partial class MainWindow : Window
     {
         var menu = new ContextMenu();
 
+        var dayLog = new MenuItem { Header = "Day log…" };
+        dayLog.Click += (_, _) => OpenDayLog();
+        menu.Items.Add(dayLog);
+
         var weeks = new MenuItem { Header = "Weeks & export…" };
         weeks.Click += (_, _) => OpenWeekBrowser();
         menu.Items.Add(weeks);
@@ -1105,6 +1107,8 @@ public partial class MainWindow : Window
         var jobCodes = new MenuItem { Header = "Job code view" };
         jobCodes.Click += (_, _) => OpenJobCodeView();
         menu.Items.Add(jobCodes);
+
+        menu.Items.Add(new Separator());
 
         var settings = new MenuItem { Header = "Settings…" };
         settings.Click += (_, _) => OpenSettings(false);
@@ -1224,12 +1228,6 @@ public partial class MainWindow : Window
 
         QueueTaskRebuild();
         RefreshDayCodeTotals();
-    }
-
-    private void AddManual_Click(object sender, RoutedEventArgs e)
-    {
-        var dialog = new ManualEntryWindow { Owner = this };
-        dialog.ShowDialog();
     }
 
     private void OnRecheckDue() => Dispatcher.Invoke(ShowRecheck);

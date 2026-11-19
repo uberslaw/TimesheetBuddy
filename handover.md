@@ -97,11 +97,12 @@ Requires [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) on Win
 | Assign No Task Selected time (next interval; split across tasks, All to Break, Not now) | `MainWindow.OnFifteenDue` → `Views/NoTaskAssignWindow` → `AppState.AssignNoTaskTime` |
 | Quick-add favorites menu | `MainWindow.QuickAdd_Click` |
 | Menu → Add job code… | `Views/QuickAddJobCodeWindow` → `AppState.AddJobCode` |
-| Settings (codes, favorites, categories, intervals, Widget tab); ⚙ button or Menu → Settings… | `Views/SettingsWindow` |
+| Settings (codes, favorites, categories, intervals, Widget tab); Menu → Settings… | `Views/SettingsWindow` |
 | Still-working recheck popup | `PromptScheduler` → `Views/RecheckWindow` (skipped in history) |
 | Catch-up prompt (only when minutes are unaccounted; Not now dismisses) | `PromptScheduler` → `UnaccountedTime` → `Views/FifteenMinuteWindow` or `RecheckWindow` |
-| Day log + free-form day notes | `Views/DayLogWindow` (uses `ViewingDate`) |
-| Manual time entry | `Views/ManualEntryWindow` (lands on `ViewingDate`) |
+| Title bar (Pin, Menu, minimize, close) and Menu (Day log…, Weeks & export…, Job code view, Settings…, Add job code…, Restore deleted tasks…, Load timesheet…) | `MainWindow.xaml` + `MainWindow.Menu_Click` |
+| Day log + free-form day notes (Menu → Day log…) | `Views/DayLogWindow` (uses `ViewingDate`) |
+| Manual time entry (Day log → Add manual; a task row's Modify Time… adds time too) | `Views/ManualEntryWindow` (lands on `ViewingDate`) |
 | Job code view (switch from the Menu; Compact tracker returns) | `Views/JobCodeViewWindow` |
 | Screen-lock prompt while a timer is running | `ScreenLockWatcher` → `Views/LockPromptWindow` |
 | Timer widget (code - category, task, ▶ compact counter ■; drag to move, click to restore; Settings → Widget → Show when minimized) | `MainWindow.UpdateTimerWidget` → `Views/TimerWidgetWindow` + `Services/TimerWidgetLayout` |
@@ -177,7 +178,7 @@ Other reasonable next steps if needed:
 4. Quick add a favorite → timer switches to that task.
 5. Settings → set recheck to a short interval (e.g. 0h 5m) with an active task → popup appears; choose next interval.
 6. Settings → set catch-up interval to 5 minutes. With a timer that has already been running for those 5 minutes, the still-working prompt appears and the assign-tasks dialog does not. With no timer and no entries in that window, the assign-tasks dialog shows the unaccounted minutes; Not now closes it without creating entries. Saving is blocked when the assigned minutes are 0 or more than the gap.
-7. Day log shows entries; day notes persist after blur/refocus.
+7. The title bar shows only Pin, Menu, — and ✕ (no +, ⚙ or ⏱). Menu lists Day log…, Weeks & export…, Job code view, a separator, Settings…, then the other items. Menu → Day log… shows entries; Add manual there adds an entry; day notes persist after blur/refocus.
 8. Close while a timer is running → the task is saved on today's list as a finished entry and does not resume after restart.
 9. Run a task, Stop, run another, then click the first task's row under "Today by task" → it turns green, its total keeps counting, and its segment count goes from 1 to 2. Clicking it again does nothing. Drag the bottom edge to resize; the height comes back after restart.
 10. Start a task and minimize (button, taskbar, Win+M) → the widget appears bottom-right with `code - category`, the task name and a ticking orange counter matching the main one; it does not take focus. Drag it elsewhere, restore, minimize again → same spot. Click it → the main window comes back and the widget hides. Stop the timer and minimize → `Idle` / `No Task Selected` / the idle counter (on a fresh launch with nothing stopped: `Idle` / `No active task` / `0`). With the widget showing, let a recheck or catch-up prompt fire → main window restores, widget hides, the dialog is on top. Close the app from the taskbar while minimized → the process exits.

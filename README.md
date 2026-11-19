@@ -35,8 +35,8 @@ Or open `TimesheetBuddy/TimesheetBuddy.csproj` in Visual Studio 2022+/2026 and p
 1. Pin the window if you want it always visible.
 2. Choose a **job code** and/or type/pick a **task name** (and a **Ticket** if there is one), then **Add**. Add puts the task on today's list and starts its timer; picking a job code on its own does not start anything. Typing a ticket that starts with `INC` or `RITM` plus a digit sets the job code to 03 (ServiceNow) and the category to Support.
 3. Use **+ Quick add** for favorite tasks.
-4. Open **⚙ Settings** to edit job codes, favorites, categories, and prompt intervals.
-5. Open **⏱** for today’s log and day notes.
+4. Open **Menu → Settings…** to edit job codes, favorites, categories, and prompt intervals.
+5. Open **Menu → Day log…** for today’s log and day notes; **Add manual** there adds a manual entry.
 6. When the recheck or 15-minute popup appears, answer it — the catch-up window will not dismiss until you save.
 
 ## Notes
