@@ -82,6 +82,13 @@ public sealed class AppTracker
         }
     }
 
+    /// <summary>Saves, then drops cached totals so files merged by Import data… are read again instead of overwritten.</summary>
+    public void ReloadFromDisk()
+    {
+        Flush();
+        _usage.ForgetSaved();
+    }
+
     private void Tick()
     {
         try

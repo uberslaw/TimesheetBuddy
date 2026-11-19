@@ -40,6 +40,7 @@ public sealed class AppState : INotifyPropertyChanged
         Categories = new ObservableCollection<string>(_settings.Categories);
         TodayEntries = new ObservableCollection<TimeEntry>(
             EntriesForDay(DateTime.Today).Reverse());
+        _store.ExternalChangesMerged += _ => ReloadFromSettings();
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -1024,6 +1025,33 @@ public sealed class AppState : INotifyPropertyChanged
     {
         PurgeExpiredDeletedEntries(persist: false);
         _store.Save(_settings);
+    }
+
+    /// <summary>
+    /// Merges an older copy into the data in use (Import data…): see <see cref="SettingsMerge.Import"/>.
+    /// Saves and refreshes the lists.
+    /// </summary>
+    public SettingsMerge.Report ImportSettings(AppSettings incoming)
+    {
+        var report = SettingsMerge.Import(_settings, SettingsStore.Clone(incoming), DateTime.UtcNow);
+        ReloadFromSettings();
+        Persist();
+        return report;
+    }
+
+    /// <summary>Picks up changes another PC saved to settings.json (merge, then save). True when it saved.</summary>
+    public bool SyncFromDisk() => _store.SaveIfChangedOnDisk(_settings);
+
+    private void ReloadFromSettings()
+    {
+        JobCodes.Clear();
+        foreach (var c in _settings.JobCodes) JobCodes.Add(c);
+        FavoriteTasks.Clear();
+        foreach (var f in _settings.FavoriteTasks) FavoriteTasks.Add(f);
+        Categories.Clear();
+        foreach (var c in _settings.Categories) Categories.Add(c);
+        RefreshToday();
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private (DateTime startUtc, DateTime endUtc) ResolveManualRange(TimeSpan duration)

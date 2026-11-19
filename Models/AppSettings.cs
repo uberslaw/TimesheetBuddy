@@ -44,6 +44,18 @@ public sealed class AppSettings
     /// Null means the view has not been customized and should list active codes.
     /// </summary>
     public List<Guid>? JobCodeViewIds { get; set; }
+
+    /// <summary>
+    /// Ids of time entries removed from <see cref="Entries"/> (purged soft deletes, trimmed segments), so a
+    /// merge with another PC's copy or an older backup does not bring them back. Kept for about 400 days.
+    /// </summary>
+    public List<RemovedEntry> RemovedEntries { get; set; } = [];
+}
+
+public sealed class RemovedEntry
+{
+    public Guid Id { get; set; }
+    public DateTime RemovedUtc { get; set; }
 }
 
 public sealed class ActiveSession

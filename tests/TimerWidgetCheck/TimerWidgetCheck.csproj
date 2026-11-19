@@ -11,13 +11,8 @@
   <ItemGroup>
     <Compile Include="..\..\Services\TimerWidgetLayout.cs" Link="TimerWidgetLayout.cs" />
     <Compile Include="..\..\Services\WidgetVisibilityRules.cs" Link="WidgetVisibilityRules.cs" />
-    <Compile Include="..\..\Models\TimeEntry.cs" Link="TimeEntry.cs" />
     <Compile Include="..\..\Services\TicketRules.cs" Link="TicketRules.cs" />
-    <Compile Include="..\..\Models\JobCode.cs" Link="JobCode.cs" />
-    <Compile Include="..\..\Models\FavoriteTask.cs" Link="FavoriteTask.cs" />
-    <Compile Include="..\..\Models\AppSettings.cs" Link="AppSettings.cs" />
     <Compile Include="..\..\Services\AppState.cs" Link="AppState.cs" />
-    <Compile Include="..\..\Services\SettingsStore.cs" Link="SettingsStore.cs" />
     <Compile Include="..\..\Services\NoTaskTime.cs" Link="NoTaskTime.cs" />
     <Compile Include="..\..\Services\UnaccountedTime.cs" Link="UnaccountedTime.cs" />
     <Compile Include="..\..\Services\WeekCalendar.cs" Link="WeekCalendar.cs" />
@@ -27,5 +22,7 @@
     <Compile Include="..\..\Services\RowTimeEdit.cs" Link="RowTimeEdit.cs" />
     <Compile Include="..\..\Services\LockIntervalSplit.cs" Link="LockIntervalSplit.cs" />
   </ItemGroup>
+
+  <Import Project="..\DataLayer.props" />
 
 </Project>

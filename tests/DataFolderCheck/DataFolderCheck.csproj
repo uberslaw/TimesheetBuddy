@@ -8,13 +8,6 @@
     <RootNamespace>TimesheetBuddy.DataFolderChecks</RootNamespace>
   </PropertyGroup>
 
-  <ItemGroup>
-    <Compile Include="..\..\Services\DataFolder.cs" Link="DataFolder.cs" />
-    <Compile Include="..\..\Services\SettingsStore.cs" Link="SettingsStore.cs" />
-    <Compile Include="..\..\Models\AppSettings.cs" Link="AppSettings.cs" />
-    <Compile Include="..\..\Models\JobCode.cs" Link="JobCode.cs" />
-    <Compile Include="..\..\Models\FavoriteTask.cs" Link="FavoriteTask.cs" />
-    <Compile Include="..\..\Models\TimeEntry.cs" Link="TimeEntry.cs" />
-  </ItemGroup>
+  <Import Project="..\DataLayer.props" />
 
 </Project>
