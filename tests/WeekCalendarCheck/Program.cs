@@ -103,10 +103,12 @@ var older = WeekCalendar.Collect(
 Check(older.Count == 2, "a past week plus the current week");
 Check(older[0].Monday == new DateTime(2026, 11, 2) && older[1].Monday == monday, "weeks are oldest first");
 
+var ticketEntry = Entry("Next", UtcFromLocal(2026, 11, 16, 9), UtcFromLocal(2026, 11, 16, 11), notes: "Follow up");
+ticketEntry.Ticket = "INC0012345";
 var exportWeeks = WeekCalendar.Collect(
     [
         mondayEntry,
-        Entry("Next", UtcFromLocal(2026, 11, 16, 9), UtcFromLocal(2026, 11, 16, 11), notes: "Follow up")
+        ticketEntry
     ],
     new DateTime(2026, 11, 18),
     clock);
@@ -114,6 +116,11 @@ Check(TimesheetExport.DefaultFileName(exportWeeks.Take(1).ToList(), ".pdf") == "
     "one week uses that Mon–Fri range in the file name");
 Check(TimesheetExport.DefaultFileName(exportWeeks, ".xlsx") == "Timesheet-2-weeks-2026-11-09-to-2026-11-20.xlsx",
     "several weeks use a single file name spanning the selection");
+var ticketRow = exportWeeks[1].Days.SelectMany(d => d.Tasks).Single();
+Check(ticketRow.Ticket == "INC0012345" && ticketRow.TaskDisplay == "INC0012345 · Next",
+    "browse rows show the ticket before the task name");
+Check(exportWeeks[0].Days.SelectMany(d => d.Tasks).Single().TaskDisplay == "Monday task",
+    "browse rows without a ticket show just the task name");
 
 var folder = Path.Combine(Path.GetTempPath(), "timesheet-buddy-week-check-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(folder);
@@ -137,6 +144,9 @@ try
         Check(first.Cell(6, 6).GetString() == "Design review", "sheet lists the notes");
         Check(second.Cell(6, 2).GetString() == "Next", "second week is its own worksheet");
         Check(second.Cell(6, 6).GetString() == "Follow up", "second worksheet keeps that week's notes");
+        Check(first.Cell(5, 7).GetString() == "Ticket", "sheet has a Ticket column after Notes");
+        Check(second.Cell(6, 7).GetString() == "INC0012345", "sheet lists the ticket");
+        Check(first.Cell(6, 7).GetString() == "", "a task without a ticket leaves the Ticket cell empty");
     }
 
     var pdf = Path.Combine(folder, "weeks.pdf");

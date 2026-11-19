@@ -143,7 +143,7 @@
                                                                 <TextBlock DockPanel.Dock="Right" Text="{Binding TimeDisplay}"
                                                                            FontFamily="Consolas, Cascadia Mono, Courier New"
                                                                            Foreground="{StaticResource MutedBrush}" Margin="8,0,0,0"/>
-                                                                <TextBlock Text="{Binding TaskName}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                                                <TextBlock Text="{Binding TaskDisplay}" FontWeight="SemiBold" TextWrapping="Wrap"/>
                                                             </DockPanel>
                                                             <TextBlock Text="{Binding Meta}" Foreground="{StaticResource MutedBrush}"
                                                                        FontSize="11" Margin="0,2,0,0" TextWrapping="Wrap"/>

@@ -231,6 +231,28 @@ const string MtgText = "MTG — Meetings";
     Check(DayTotals.ByJobCodeForDay(entries, day, clock).Single().Label == "No job code", "the band shows it under No job code");
 }
 
+// A ticket row moves as its own row and the running session keeps its ticket.
+{
+    var ticketed = Timer("Spec", Local(16, 0), null);
+    ticketed.Ticket = "INC0012345";
+    var plain = Timer("Spec", Local(9, 0), Local(9, 30));
+    var entries = new List<TimeEntry> { ticketed, plain };
+    var active = new ActiveSession
+    {
+        EntryId = ticketed.Id,
+        TaskName = "Spec",
+        Category = "Development",
+        JobCodeId = dev,
+        JobCodeText = "DEV — Development",
+        Ticket = "INC0012345",
+        StartedUtc = ticketed.StartUtc
+    };
+    var result = RowTimeEdit.Move(entries, active, day, TaskTypeSummary.KeyOf(ticketed), mtg, MtgText);
+    Check(result.Applied && result.Moved == 1 && plain.JobCodeId == dev, "only the ticket row moves, not the same name without a ticket");
+    Check(result.ActiveSession!.Ticket == "INC0012345" && TaskTypeSummary.KeyOf(result.ActiveSession) == result.NewKey,
+        "the re-pointed session keeps its ticket and matches the new key");
+}
+
 Console.WriteLine();
 if (failures.Count == 0)
 {

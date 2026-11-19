@@ -72,15 +72,12 @@ public partial class FifteenMinuteWindow : Window
         if (session is not null)
         {
             return new CatchUpTarget(
-                TaskTypeSummary.KeyOf(
-                    session.TaskName,
-                    session.Category,
-                    session.JobCodeId,
-                    session.JobCodeText),
+                TaskTypeSummary.KeyOf(session),
                 session.TaskName,
                 string.IsNullOrWhiteSpace(session.Category) ? "General" : session.Category,
                 session.JobCodeId,
-                session.JobCodeText ?? string.Empty);
+                session.JobCodeText ?? string.Empty,
+                TicketRules.Normalize(session.Ticket));
         }
 
         var latest = today.FirstOrDefault();
@@ -167,6 +164,7 @@ public partial class FifteenMinuteWindow : Window
             Category = target.Category,
             JobCodeId = target.JobCodeId,
             JobCodeText = JobCode.FormatLabelFromStored(target.JobCodeText),
+            Ticket = target.Ticket,
             Minutes = _unaccountedMinutes
         };
 
@@ -180,7 +178,8 @@ public partial class FifteenMinuteWindow : Window
         string TaskName,
         string Category,
         Guid? JobCodeId,
-        string JobCodeText)
+        string JobCodeText,
+        string Ticket = "")
     {
         public string Display
         {
@@ -189,7 +188,7 @@ public partial class FifteenMinuteWindow : Window
                 var code = JobCode.FormatLabelFromStored(JobCodeText);
                 if (code == "—")
                     code = "No job code";
-                return $"{code}, {Category}, {TaskName}";
+                return $"{code}, {Category}, {TicketRules.Label(Ticket, TaskName)}";
             }
         }
 
@@ -198,6 +197,7 @@ public partial class FifteenMinuteWindow : Window
             row.TaskName,
             row.Category,
             row.JobCodeId,
-            row.JobCodeText);
+            row.JobCodeText,
+            row.Ticket);
     }
 }

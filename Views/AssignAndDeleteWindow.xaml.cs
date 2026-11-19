@@ -25,7 +25,7 @@ public partial class AssignAndDeleteWindow : Window
         _codes = codes;
 
         IntroText.Text =
-            $"Assign time from “{source.TaskName}” ({source.Category} · {JobCode.FormatLabelFromStored(source.JobCodeText)}) " +
+            $"Assign time from “{TicketRules.Label(source.Ticket, source.TaskName)}” ({source.Category} · {JobCode.FormatLabelFromStored(source.JobCodeText)}) " +
             $"— {source.SegmentCount} portion{(source.SegmentCount == 1 ? "" : "s")}, {DayTotals.FormatCompact(source.Total)} total.";
 
         var options = otherTasks
@@ -101,7 +101,8 @@ public partial class AssignAndDeleteWindow : Window
             var code = _codes.FirstOrDefault(c => c.Id == row.JobCodeId);
             var codeText = code?.Display ?? row.ResolvedJobCodeText;
             var category = string.IsNullOrWhiteSpace(row.Category) ? "General" : row.Category.Trim();
-            var destKey = TaskTypeSummary.KeyOf(name, category, row.JobCodeId, codeText);
+            var ticket = row.TicketFor(name, category);
+            var destKey = TaskTypeSummary.KeyOf(name, category, row.JobCodeId, codeText, ticket);
             if (destKey == _sourceKey)
             {
                 MessageBox.Show(this,
@@ -118,7 +119,8 @@ public partial class AssignAndDeleteWindow : Window
                 TaskName = name,
                 Category = category,
                 JobCodeId = row.JobCodeId,
-                JobCodeText = codeText
+                JobCodeText = codeText,
+                Ticket = ticket
             });
         }
 
@@ -133,7 +135,8 @@ public partial class AssignAndDeleteWindow : Window
         string Category,
         Guid? JobCodeId,
         string JobCodeText,
-        string Display)
+        string Display,
+        string Ticket = "")
     {
         public static ExistingTaskOption From(TaskTypeRow row) => new(
             row.Key,
@@ -141,7 +144,8 @@ public partial class AssignAndDeleteWindow : Window
             row.Category,
             row.JobCodeId,
             row.JobCodeText,
-            $"{row.TaskName} · {row.Category} · {JobCode.FormatLabelFromStored(row.JobCodeText)}");
+            $"{TicketRules.Label(row.Ticket, row.TaskName)} · {row.Category} · {JobCode.FormatLabelFromStored(row.JobCodeText)}",
+            row.Ticket);
     }
 
     private sealed class SegmentRow : INotifyPropertyChanged
@@ -213,6 +217,14 @@ public partial class AssignAndDeleteWindow : Window
         }
 
         public string ResolvedJobCodeText => _jobCodeText;
+
+        /// <summary>The picked task's ticket, kept only while the name and category still match it.</summary>
+        public string TicketFor(string name, string category) =>
+            ExistingTarget is { } target &&
+            string.Equals(target.TaskName.Trim(), name, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(target.Category.Trim(), category, StringComparison.OrdinalIgnoreCase)
+                ? target.Ticket
+                : string.Empty;
 
         public void ApplyOption(ExistingTaskOption option)
         {

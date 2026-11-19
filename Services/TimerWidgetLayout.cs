@@ -38,11 +38,11 @@ public static class TimerWidgetLayout
         return cat.Length == 0 ? code : $"{code} - {cat}";
     }
 
-    public static string TaskLine(bool running, string? taskName, bool noTaskRunning = false)
+    public static string TaskLine(bool running, string? taskName, bool noTaskRunning = false, string? ticket = null)
     {
         if (!running)
             return noTaskRunning ? NoTaskTask : IdleTask;
-        var name = (taskName ?? string.Empty).Trim();
+        var name = TicketRules.Label(ticket, taskName);
         return name.Length > 0 ? name : "Untitled task";
     }
 

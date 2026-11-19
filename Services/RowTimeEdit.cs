@@ -162,6 +162,7 @@ public static class RowTimeEdit
                 Category = active.Category,
                 JobCodeId = targetId,
                 JobCodeText = text,
+                Ticket = active.Ticket,
                 StartedUtc = active.StartedUtc
             };
             activeMutated = true;

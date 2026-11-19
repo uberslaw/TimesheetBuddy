@@ -9,6 +9,7 @@ public sealed class TimeEntry
     public string Category { get; set; } = "General";
     public Guid? JobCodeId { get; set; }
     public string JobCodeText { get; set; } = string.Empty;
+    public string Ticket { get; set; } = string.Empty;
     public string Notes { get; set; } = string.Empty;
     public int ManualMinutes { get; set; }
     public string Source { get; set; } = "timer"; // timer | fifteen | manual | add-time

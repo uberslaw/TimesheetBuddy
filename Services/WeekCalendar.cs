@@ -148,6 +148,7 @@ public static class WeekCalendar
             DateDisplay = startLocal.ToString("ddd d MMM yyyy", Labels),
             TimeDisplay = time,
             TaskName = string.IsNullOrWhiteSpace(entry.TaskName) ? "(untitled)" : entry.TaskName.Trim(),
+            Ticket = TicketRules.Normalize(entry.Ticket),
             JobCode = entry.JobCodeText?.Trim() ?? string.Empty,
             Category = entry.Category?.Trim() ?? string.Empty,
             Notes = entry.Notes?.Trim() ?? string.Empty,
@@ -194,6 +195,10 @@ public sealed class WeekTaskRow
     public required TimeSpan Duration { get; init; }
     public required string DurationDisplay { get; init; }
     public required bool IsRunning { get; init; }
+    public string Ticket { get; init; } = string.Empty;
+
+    /// <summary>Task name with the ticket in front when there is one ("INC0012345 · task").</summary>
+    public string TaskDisplay => TicketRules.Label(Ticket, TaskName);
 
     public string Meta
     {

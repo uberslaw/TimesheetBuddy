@@ -184,6 +184,7 @@ public static class UnaccountedTime
                     Category = string.IsNullOrWhiteSpace(slice.Category) ? "General" : slice.Category.Trim(),
                     JobCodeId = slice.JobCodeId,
                     JobCodeText = slice.JobCodeText?.Trim() ?? string.Empty,
+                    Ticket = TicketRules.Normalize(slice.Ticket),
                     Notes = slice.Notes?.Trim() ?? string.Empty,
                     ManualMinutes = minutes,
                     Source = "fifteen"
@@ -326,6 +327,7 @@ public sealed record CatchUpSlice
     public string Category { get; init; } = "General";
     public Guid? JobCodeId { get; init; }
     public string JobCodeText { get; init; } = string.Empty;
+    public string Ticket { get; init; } = string.Empty;
     public string Notes { get; init; } = string.Empty;
     public int Minutes { get; init; }
 }

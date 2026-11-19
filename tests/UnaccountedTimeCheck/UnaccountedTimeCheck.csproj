@@ -12,6 +12,7 @@
     <Compile Include="Program.cs" />
     <Compile Include="..\..\Services\UnaccountedTime.cs" />
     <Compile Include="..\..\Models\TimeEntry.cs" />
+    <Compile Include="..\..\Services\TicketRules.cs" Link="TicketRules.cs" />
     <Compile Include="..\..\Models\AppSettings.cs" />
     <Compile Include="..\..\Models\JobCode.cs" />
     <Compile Include="..\..\Models\FavoriteTask.cs" />

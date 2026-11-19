@@ -23,7 +23,7 @@ public partial class RestoreDeletedWindow : Window
             _rows.Add(new DeletedRow
             {
                 Key = group.Key,
-                Name = group.TaskName,
+                Name = Services.TicketRules.Label(group.Ticket, group.TaskName),
                 Category = group.Category,
                 DeletedAtDisplay = group.DeletedAtLocal.ToString("HH:mm:ss"),
                 IsSelected = false

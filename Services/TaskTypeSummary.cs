@@ -24,28 +24,35 @@ public sealed record TaskTypeRow(
     TimeSpan Total,
     int SegmentCount,
     DateTime LastStartUtc,
-    IReadOnlyList<TaskSegment> Segments);
+    IReadOnlyList<TaskSegment> Segments,
+    string Ticket = "");
 
 public static class TaskTypeSummary
 {
     public const string DefaultCategory = "General";
 
     /// <summary>
-    /// Task name and category compare case-insensitively. The job code is its id; an entry
-    /// without an id falls back to its code text.
+    /// Task name, category and ticket compare case-insensitively. The job code is its id; an entry
+    /// without an id falls back to its code text. Without a ticket the key is the same as before
+    /// tickets existed.
     /// </summary>
-    public static string KeyOf(string? taskName, string? category, Guid? jobCodeId, string? jobCodeText)
+    public static string KeyOf(string? taskName, string? category, Guid? jobCodeId, string? jobCodeText, string? ticket = null)
     {
         var name = (taskName ?? string.Empty).Trim().ToUpperInvariant();
         var cat = NormalizeCategory(category).ToUpperInvariant();
         var code = jobCodeId is Guid id
             ? "id:" + id.ToString("N")
             : "text:" + (jobCodeText ?? string.Empty).Trim().ToUpperInvariant();
-        return string.Join('\u001f', name, cat, code);
+        var key = string.Join('\u001f', name, cat, code);
+        var t = TicketRules.Normalize(ticket);
+        return t.Length == 0 ? key : key + "\u001fticket:" + t.ToUpperInvariant();
     }
 
     public static string KeyOf(TimeEntry entry) =>
-        KeyOf(entry.TaskName, entry.Category, entry.JobCodeId, entry.JobCodeText);
+        KeyOf(entry.TaskName, entry.Category, entry.JobCodeId, entry.JobCodeText, entry.Ticket);
+
+    public static string KeyOf(ActiveSession session) =>
+        KeyOf(session.TaskName, session.Category, session.JobCodeId, session.JobCodeText, session.Ticket);
 
     public static bool IsOnDay(TimeEntry entry, DateTime dayLocal)
     {
@@ -100,7 +107,8 @@ public static class TaskTypeSummary
                 total,
                 list.Count,
                 latest.StartUtc,
-                segments));
+                segments,
+                TicketRules.Normalize(latest.Ticket)));
         }
 
         return rows

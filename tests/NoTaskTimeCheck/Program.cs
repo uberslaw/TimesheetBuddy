@@ -177,6 +177,41 @@ try
     Check(assign.IsNoTaskRunning && DateTime.UtcNow - assign.NoTaskStartedUtc!.Value < TimeSpan.FromSeconds(5),
         "idle restarts from now after assigning");
     Check(NoTaskTime.WholeMinutes(NoTaskTime.Total(assign.OpenNoTaskTime())) == 5, "the unassigned rest of the closed run stays pending");
+
+    // Add with a ticket: ends idle, stores the ticket on the entry and session, labels show it.
+    var ticketed = NewState();
+    ticketed.StartOrSwitch("Email", "Admin", null, "ADMIN");
+    ticketed.StopActive(save: true);
+    ticketed.StartOrSwitch("Reset password", "Support", null, "03 — SERVICE-NOW", " INC0012345 ");
+    var ticketEntry = ticketed.Settings.Entries.Single(e => e.Id == ticketed.ActiveSession!.EntryId);
+    Check(!ticketed.IsNoTaskRunning, "Add with a ticket ends No Task Selected");
+    Check(ticketEntry.Ticket == "INC0012345" && ticketed.ActiveSession!.Ticket == "INC0012345", "the ticket is stored trimmed on the entry and session");
+    Check(ticketed.StatusText == "Tracking: INC0012345 · Reset password", "status shows ticket · task name");
+    Check(ticketed.ActiveTaskLabel == "INC0012345 · Reset password", "active task label shows the ticket");
+    ticketed.StopActive(save: true);
+    Check(ticketed.ResumeLastTask() && ticketed.ActiveSession!.Ticket == "INC0012345", "resuming the last task keeps its ticket");
+    var renameKey = TaskTypeSummary.KeyOf(ticketed.ActiveSession!);
+    var renamedKey = ticketed.RenameTaskTypeOnViewingDay(renameKey, "Reset MFA", "Support");
+    Check(renamedKey is not null && ticketed.ActiveSession!.Ticket == "INC0012345" && renamedKey == TaskTypeSummary.KeyOf(ticketed.ActiveSession),
+        "renaming a ticket row keeps the ticket on the running session");
+    var reloaded = NewState();
+    Check(reloaded.Settings.Entries.Any(e => e.Ticket == "INC0012345"), "the ticket survives a save and reload");
+
+    var legacyFolder = Path.Combine(folder, "legacy");
+    Directory.CreateDirectory(legacyFolder);
+    File.WriteAllText(Path.Combine(legacyFolder, "settings.json"), """
+        {
+          "entries": [
+            { "id": "6f1c1f0e-1111-4c1d-9a51-111111111111", "startUtc": "2026-11-18T09:00:00Z", "endUtc": null,
+              "taskName": "Old", "category": "General", "jobCodeText": "DEV", "source": "timer" }
+          ],
+          "activeSession": { "entryId": "6f1c1f0e-1111-4c1d-9a51-111111111111", "taskName": "Old",
+            "category": "General", "jobCodeText": "DEV", "startedUtc": "2026-11-18T09:00:00Z" }
+        }
+        """);
+    var legacy = new SettingsStore(legacyFolder).Load();
+    Check(legacy.Entries.Count == 1 && legacy.Entries[0].Ticket == "" && legacy.ActiveSession?.Ticket == "",
+        "settings.json without tickets loads with empty tickets");
 }
 finally
 {

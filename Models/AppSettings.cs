@@ -49,6 +49,7 @@ public sealed class ActiveSession
     public string Category { get; set; } = "General";
     public Guid? JobCodeId { get; set; }
     public string JobCodeText { get; set; } = string.Empty;
+    public string Ticket { get; set; } = string.Empty;
     public DateTime StartedUtc { get; set; }
 }
 

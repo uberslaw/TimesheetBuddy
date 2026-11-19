@@ -11,6 +11,7 @@ namespace TimesheetBuddy.Services;
 public static class TimesheetExport
 {
     private static readonly string[] Columns = ["Date", "Task", "Job code", "Category", "Duration", "Notes"];
+    private static readonly string[] ExcelColumns = [.. Columns, "Ticket"];
 
     public static string DefaultFileName(IReadOnlyList<WorkWeek> weeks, string extension)
     {
@@ -133,7 +134,7 @@ public static class TimesheetExport
                 foreach (var task in day.Tasks)
                 {
                     BodyCell(table, task.DateDisplay);
-                    BodyCell(table, task.TaskName);
+                    BodyCell(table, task.TaskDisplay);
                     BodyCell(table, DisplayOrDash(task.JobCode));
                     BodyCell(table, DisplayOrDash(task.Category));
                     BodyCell(table, task.DurationDisplay);
@@ -153,7 +154,7 @@ public static class TimesheetExport
     {
         sheet.Cell(1, 1).Value = "Week";
         sheet.Cell(1, 2).Value = week.Label;
-        sheet.Range(1, 2, 1, 6).Merge();
+        sheet.Range(1, 2, 1, ExcelColumns.Length).Merge();
         sheet.Cell(1, 1).Style.Font.Bold = true;
         sheet.Cell(1, 2).Style.Font.Bold = true;
         sheet.Cell(1, 2).Style.Font.FontSize = 14;
@@ -169,10 +170,10 @@ public static class TimesheetExport
             sheet.Cell(4, 1).Value = "No time logged this week.";
 
         const int headerRow = 5;
-        for (var column = 0; column < Columns.Length; column++)
+        for (var column = 0; column < ExcelColumns.Length; column++)
         {
             var cell = sheet.Cell(headerRow, column + 1);
-            cell.Value = Columns[column];
+            cell.Value = ExcelColumns[column];
             cell.Style.Font.Bold = true;
             cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#D8F3EA");
         }
@@ -188,6 +189,7 @@ public static class TimesheetExport
                 sheet.Cell(row, 4).Value = task.Category;
                 sheet.Cell(row, 5).Value = task.DurationDisplay;
                 sheet.Cell(row, 6).Value = task.Notes;
+                sheet.Cell(row, 7).Value = task.Ticket;
                 row++;
             }
         }
@@ -198,11 +200,12 @@ public static class TimesheetExport
         sheet.Column(4).Width = 16;
         sheet.Column(5).Width = 14;
         sheet.Column(6).Width = 40;
+        sheet.Column(7).Width = 16;
         sheet.Column(2).Style.Alignment.WrapText = true;
         sheet.Column(6).Style.Alignment.WrapText = true;
         sheet.SheetView.FreezeRows(headerRow);
         if (row > headerRow + 1)
-            sheet.Range(headerRow, 1, row - 1, Columns.Length).SetAutoFilter();
+            sheet.Range(headerRow, 1, row - 1, ExcelColumns.Length).SetAutoFilter();
     }
 
     private static string SheetName(WorkWeek week, HashSet<string> used)

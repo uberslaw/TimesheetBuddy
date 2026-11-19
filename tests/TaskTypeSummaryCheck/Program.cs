@@ -215,6 +215,37 @@ Check(moveRunning.ActiveSession!.TaskName == "Moved" && moveRunning.ActiveSessio
       moveRunning.ActiveSession.EntryId == open.Id && open.EndUtc is null,
     "timer keeps running under the destination task");
 
+// Assigning onto a ticket task carries the ticket to the entry and the running session.
+var ticketPortion = Entry("Old task", "Development", dev, "DEV", Local(2026, 11, 11, 13), null);
+var ticketSession = new ActiveSession
+{
+    EntryId = ticketPortion.Id,
+    TaskName = ticketPortion.TaskName,
+    Category = ticketPortion.Category,
+    JobCodeId = dev,
+    JobCodeText = "DEV",
+    StartedUtc = ticketPortion.StartUtc
+};
+var toTicket = TaskTypeReassign.Apply(
+    [ticketPortion],
+    ticketSession,
+    today,
+    TaskTypeSummary.KeyOf(ticketPortion),
+    [
+        new TaskTypeReassign.Assignment
+        {
+            EntryId = ticketPortion.Id,
+            TaskName = "Old task",
+            Category = "Development",
+            JobCodeId = dev,
+            JobCodeText = "DEV",
+            Ticket = "RITM0012345"
+        }
+    ]);
+Check(toTicket.Applied, "the same task with a ticket counts as a different destination");
+Check(ticketPortion.Ticket == "RITM0012345" && toTicket.ActiveSession!.Ticket == "RITM0012345",
+    "the ticket lands on the entry and the running session");
+
 Console.WriteLine();
 if (failures.Count == 0)
 {

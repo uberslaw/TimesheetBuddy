@@ -26,6 +26,7 @@ public static class LockIntervalSplit
         public string Category { get; init; } = "General";
         public Guid? JobCodeId { get; init; }
         public string JobCodeText { get; init; } = string.Empty;
+        public string Ticket { get; init; } = string.Empty;
 
         public static Snapshot FromSession(ActiveSession session, DateTime lockedAtUtc) => new()
         {
@@ -34,7 +35,8 @@ public static class LockIntervalSplit
             TaskName = session.TaskName,
             Category = string.IsNullOrWhiteSpace(session.Category) ? "General" : session.Category,
             JobCodeId = session.JobCodeId,
-            JobCodeText = session.JobCodeText ?? string.Empty
+            JobCodeText = session.JobCodeText ?? string.Empty,
+            Ticket = session.Ticket ?? string.Empty
         };
     }
 
@@ -76,6 +78,7 @@ public static class LockIntervalSplit
             code = "No job code";
         var category = string.IsNullOrWhiteSpace(snapshot.Category) ? "General" : snapshot.Category.Trim();
         var task = string.IsNullOrWhiteSpace(snapshot.TaskName) ? "Untitled task" : snapshot.TaskName.Trim();
+        task = TicketRules.Label(snapshot.Ticket, task);
         return $"{code}, {category}, {task}";
     }
 
@@ -162,6 +165,7 @@ public static class LockIntervalSplit
                 Category = original.Category,
                 JobCodeId = original.JobCodeId,
                 JobCodeText = original.JobCodeText,
+                Ticket = original.Ticket,
                 Source = string.IsNullOrWhiteSpace(original.Source) ? "timer" : original.Source
             });
             cursor = lockEnd;
@@ -175,6 +179,7 @@ public static class LockIntervalSplit
             Category = original.Category,
             JobCodeId = original.JobCodeId,
             JobCodeText = original.JobCodeText,
+            Ticket = original.Ticket,
             Source = string.IsNullOrWhiteSpace(original.Source) ? "timer" : original.Source
         };
 
@@ -194,6 +199,7 @@ public static class LockIntervalSplit
                 Category = continued.Category,
                 JobCodeId = continued.JobCodeId,
                 JobCodeText = continued.JobCodeText ?? string.Empty,
+                Ticket = continued.Ticket ?? string.Empty,
                 StartedUtc = continued.StartUtc
             }
         };
@@ -241,6 +247,7 @@ public static class LockIntervalSplit
             Category = original.Category,
             JobCodeId = original.JobCodeId,
             JobCodeText = original.JobCodeText,
+            Ticket = original.Ticket,
             Source = string.IsNullOrWhiteSpace(original.Source) ? "timer" : original.Source
         };
 
@@ -261,6 +268,7 @@ public static class LockIntervalSplit
                 Category = continued.Category,
                 JobCodeId = continued.JobCodeId,
                 JobCodeText = continued.JobCodeText ?? string.Empty,
+                Ticket = continued.Ticket ?? string.Empty,
                 StartedUtc = continued.StartUtc
             }
         };

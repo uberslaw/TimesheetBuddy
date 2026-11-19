@@ -37,7 +37,7 @@ public partial class DayLogWindow : Window
             StartLocal = e.StartUtc.ToLocalTime().ToString("HH:mm"),
             EndLocal = e.EndUtc is null ? "…" : e.EndUtc.Value.ToLocalTime().ToString("HH:mm"),
             Duration = FormatDuration(e.Duration),
-            Task = e.TaskName,
+            Task = Services.TicketRules.Label(e.Ticket, e.TaskName),
             Code = JobCode.FormatLabelFromStored(e.JobCodeText),
             Category = e.Category,
             Notes = e.Notes,

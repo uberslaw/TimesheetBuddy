@@ -112,7 +112,7 @@ public partial class TimerWidgetWindow : Window
 
         var code = running ? _state.FindJobCode(session!.JobCodeId)?.Code : null;
         HeaderText.Text = TimerWidgetLayout.HeaderLine(running, code, session?.JobCodeText, session?.Category);
-        TaskText.Text = TimerWidgetLayout.TaskLine(running, session?.TaskName, noTask);
+        TaskText.Text = TimerWidgetLayout.TaskLine(running, session?.TaskName, noTask, session?.Ticket);
         TaskText.ToolTip = TaskText.Text;
 
         StartButton.IsEnabled = !history && !running;
@@ -130,10 +130,10 @@ public partial class TimerWidgetWindow : Window
             var last = _state.LastWorkedEntry();
             StartButton.ToolTip = last is null
                 ? "Start: open Timesheet Buddy to pick a task"
-                : $"Start: resume {last.TaskName.Trim()}";
+                : $"Start: resume {TicketRules.Label(last.Ticket, last.TaskName)}";
         }
 
-        StopButton.ToolTip = running ? $"Stop {session!.TaskName}" : "Stop (no task is running)";
+        StopButton.ToolTip = running ? $"Stop {TicketRules.Label(session!.Ticket, session.TaskName)}" : "Stop (no task is running)";
     }
 
     private void Start_Click(object sender, RoutedEventArgs e)

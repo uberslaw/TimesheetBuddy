@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <Compile Include="..\..\Models\TimeEntry.cs" Link="TimeEntry.cs" />
+    <Compile Include="..\..\Services\TicketRules.cs" Link="TicketRules.cs" />
     <Compile Include="..\..\Models\JobCode.cs" Link="JobCode.cs" />
     <Compile Include="..\..\Models\AppSettings.cs" Link="AppSettings.cs" />
     <Compile Include="..\..\Models\FavoriteTask.cs" Link="FavoriteTask.cs" />

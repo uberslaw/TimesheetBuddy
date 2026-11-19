@@ -15,6 +15,7 @@ public static class TaskTypeReassign
         public string Category { get; init; } = TaskTypeSummary.DefaultCategory;
         public Guid? JobCodeId { get; init; }
         public string JobCodeText { get; init; } = string.Empty;
+        public string Ticket { get; init; } = string.Empty;
     }
 
     public sealed class Result
@@ -70,7 +71,8 @@ public static class TaskTypeReassign
                 name,
                 category,
                 assignment.JobCodeId,
-                assignment.JobCodeText);
+                assignment.JobCodeText,
+                assignment.Ticket);
             if (destKey == sourceKey)
                 return Fail("Choose a different task for each portion — the source task is being deleted.");
         }
@@ -86,11 +88,13 @@ public static class TaskTypeReassign
                 ? TaskTypeSummary.DefaultCategory
                 : assignment.Category.Trim();
             var codeText = assignment.JobCodeText?.Trim() ?? string.Empty;
+            var ticket = TicketRules.Normalize(assignment.Ticket);
 
             entry.TaskName = name;
             entry.Category = category;
             entry.JobCodeId = assignment.JobCodeId;
             entry.JobCodeText = codeText;
+            entry.Ticket = ticket;
 
             if (nextActive is not null && nextActive.EntryId == entry.Id)
             {
@@ -101,6 +105,7 @@ public static class TaskTypeReassign
                     Category = category,
                     JobCodeId = assignment.JobCodeId,
                     JobCodeText = codeText,
+                    Ticket = ticket,
                     StartedUtc = nextActive.StartedUtc
                 };
                 activeMutated = true;

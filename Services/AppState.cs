@@ -15,11 +15,12 @@ public sealed record DeletedTaskGroup(
     Guid? JobCodeId,
     string JobCodeText,
     DateTime DeletedAtLocal,
-    IReadOnlyList<Guid> EntryIds);
+    IReadOnlyList<Guid> EntryIds,
+    string Ticket = "");
 
 public sealed class AppState : INotifyPropertyChanged
 {
-    private const string IdleStatus = "Idle — pick a job code or task to start";
+    private const string IdleStatus = "Idle — pick a job code or task, then Add";
 
     private readonly SettingsStore _store;
     private AppSettings _settings;
@@ -128,8 +129,9 @@ public sealed class AppState : INotifyPropertyChanged
         }
     }
 
-    public string ActiveTaskLabel => ActiveSession?.TaskName is { Length: > 0 } name
-        ? name
+    public string ActiveTaskLabel => ActiveSession is { } session &&
+                                     TicketRules.Label(session.Ticket, session.TaskName) is { Length: > 0 } label
+        ? label
         : "No active task";
 
     public string ActiveJobCodeLabel => ActiveSession?.JobCodeText is { Length: > 0 } code
@@ -177,7 +179,7 @@ public sealed class AppState : INotifyPropertyChanged
         StatusText = $"Tracking: {ActiveTaskLabel}";
     }
 
-    public void StartOrSwitch(string taskName, string category, JobCode? jobCode)
+    public void StartOrSwitch(string taskName, string category, JobCode? jobCode, string? ticket = null)
     {
         if (IsHistoryMode) return;
         if (string.IsNullOrWhiteSpace(taskName) && jobCode is null)
@@ -187,14 +189,14 @@ public sealed class AppState : INotifyPropertyChanged
             : !string.IsNullOrWhiteSpace(jobCode?.Description) ? jobCode.Description
             : jobCode?.Code ?? "Untitled task";
 
-        StartOrSwitch(name, category, jobCode?.Id, jobCode?.Display ?? string.Empty);
+        StartOrSwitch(name, category, jobCode?.Id, jobCode?.Display ?? string.Empty, ticket);
     }
 
     /// <summary>
     /// Starts a task type logged earlier. The code id and text are kept as given, so the new
     /// segment groups with the earlier ones even when that code was since removed.
     /// </summary>
-    public void StartOrSwitch(string taskName, string category, Guid? jobCodeId, string jobCodeText)
+    public void StartOrSwitch(string taskName, string category, Guid? jobCodeId, string jobCodeText, string? ticket = null)
     {
         if (IsHistoryMode) return;
         if (string.IsNullOrWhiteSpace(taskName) && jobCodeId is null && string.IsNullOrWhiteSpace(jobCodeText))
@@ -208,6 +210,7 @@ public sealed class AppState : INotifyPropertyChanged
             ? (string.IsNullOrWhiteSpace(jobCodeText) ? "Untitled task" : jobCodeText.Trim())
             : taskName.Trim();
         var codeText = jobCodeText?.Trim() ?? string.Empty;
+        var ticketText = TicketRules.Normalize(ticket);
 
         var entry = new TimeEntry
         {
@@ -216,6 +219,7 @@ public sealed class AppState : INotifyPropertyChanged
             Category = string.IsNullOrWhiteSpace(category) ? "General" : category.Trim(),
             JobCodeId = jobCodeId,
             JobCodeText = codeText,
+            Ticket = ticketText,
             Source = "timer"
         };
 
@@ -227,13 +231,14 @@ public sealed class AppState : INotifyPropertyChanged
             Category = entry.Category,
             JobCodeId = jobCodeId,
             JobCodeText = codeText,
+            Ticket = ticketText,
             StartedUtc = entry.StartUtc
         };
 
         RefreshToday();
         Persist();
         Tick();
-        StatusText = $"Tracking: {name}";
+        StatusText = $"Tracking: {ActiveTaskLabel}";
     }
 
     /// <summary>
@@ -423,7 +428,8 @@ public sealed class AppState : INotifyPropertyChanged
         string category,
         Guid? jobCodeId,
         string jobCodeText,
-        TimeSpan duration)
+        TimeSpan duration,
+        string? ticket = null)
     {
         if (duration <= TimeSpan.Zero) return;
 
@@ -440,6 +446,7 @@ public sealed class AppState : INotifyPropertyChanged
             Category = string.IsNullOrWhiteSpace(category) ? "General" : category.Trim(),
             JobCodeId = jobCodeId,
             JobCodeText = jobCodeText?.Trim() ?? string.Empty,
+            Ticket = TicketRules.Normalize(ticket),
             Notes = "Added time",
             ManualMinutes = totalMinutes,
             Source = "add-time"
@@ -531,12 +538,7 @@ public sealed class AppState : INotifyPropertyChanged
     {
         if (string.IsNullOrWhiteSpace(key)) return;
 
-        if (ActiveSession is not null &&
-            TaskTypeSummary.KeyOf(
-                ActiveSession.TaskName,
-                ActiveSession.Category,
-                ActiveSession.JobCodeId,
-                ActiveSession.JobCodeText) == key)
+        if (ActiveSession is not null && TaskTypeSummary.KeyOf(ActiveSession) == key)
         {
             StopActive(save: true);
         }
@@ -622,7 +624,8 @@ public sealed class AppState : INotifyPropertyChanged
                     latest.JobCodeId,
                     latest.JobCodeText.Trim(),
                     latest.DeletedAtLocal ?? DateTime.Now,
-                    pair.Value.Select(e => e.Id).ToList());
+                    pair.Value.Select(e => e.Id).ToList(),
+                    TicketRules.Normalize(latest.Ticket));
             })
             .OrderByDescending(g => g.DeletedAtLocal)
             .ThenBy(g => g.TaskName, StringComparer.OrdinalIgnoreCase)
@@ -763,12 +766,7 @@ public sealed class AppState : INotifyPropertyChanged
             changed = true;
         }
 
-        if (ActiveSession is not null &&
-            TaskTypeSummary.KeyOf(
-                ActiveSession.TaskName,
-                ActiveSession.Category,
-                ActiveSession.JobCodeId,
-                ActiveSession.JobCodeText) == key)
+        if (ActiveSession is not null && TaskTypeSummary.KeyOf(ActiveSession) == key)
         {
             ActiveSession = new ActiveSession
             {
@@ -777,14 +775,11 @@ public sealed class AppState : INotifyPropertyChanged
                 Category = ActiveSession.Category,
                 JobCodeId = newCode.Id,
                 JobCodeText = newCode.Display,
+                Ticket = ActiveSession.Ticket,
                 StartedUtc = ActiveSession.StartedUtc
             };
             StatusText = $"Tracking: {ActiveTaskLabel}";
-            newKey ??= TaskTypeSummary.KeyOf(
-                ActiveSession.TaskName,
-                ActiveSession.Category,
-                ActiveSession.JobCodeId,
-                ActiveSession.JobCodeText);
+            newKey ??= TaskTypeSummary.KeyOf(ActiveSession);
             changed = true;
         }
 
@@ -821,12 +816,7 @@ public sealed class AppState : INotifyPropertyChanged
             changed = true;
         }
 
-        if (ActiveSession is not null &&
-            TaskTypeSummary.KeyOf(
-                ActiveSession.TaskName,
-                ActiveSession.Category,
-                ActiveSession.JobCodeId,
-                ActiveSession.JobCodeText) == key)
+        if (ActiveSession is not null && TaskTypeSummary.KeyOf(ActiveSession) == key)
         {
             ActiveSession = new ActiveSession
             {
@@ -835,10 +825,11 @@ public sealed class AppState : INotifyPropertyChanged
                 Category = category,
                 JobCodeId = ActiveSession.JobCodeId,
                 JobCodeText = ActiveSession.JobCodeText,
+                Ticket = ActiveSession.Ticket,
                 StartedUtc = ActiveSession.StartedUtc
             };
-            StatusText = $"Tracking: {name}";
-            newKey ??= TaskTypeSummary.KeyOf(name, category, ActiveSession.JobCodeId, ActiveSession.JobCodeText);
+            StatusText = $"Tracking: {ActiveTaskLabel}";
+            newKey ??= TaskTypeSummary.KeyOf(ActiveSession);
             changed = true;
         }
 
@@ -1002,7 +993,7 @@ public sealed class AppState : INotifyPropertyChanged
         if (last is null) return false;
 
         var code = FindJobCode(last.JobCodeId);
-        StartOrSwitch(last.TaskName, last.Category, last.JobCodeId, code?.Display ?? last.JobCodeText);
+        StartOrSwitch(last.TaskName, last.Category, last.JobCodeId, code?.Display ?? last.JobCodeText, last.Ticket);
         return ActiveSession is not null;
     }
 
