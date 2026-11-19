@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 using TimesheetBuddy.Services;
@@ -11,10 +12,11 @@ public partial class App : Application
     public static PromptScheduler Scheduler { get; private set; } = null!;
     public static SettingsStore Store { get; private set; } = null!;
 
-    public static string CrashLogPath { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "TimesheetBuddy",
-        "crash.log");
+    /// <summary>Always in the default folder so it works when a custom data folder is unavailable.</summary>
+    public static string CrashLogPath { get; } = Path.Combine(DataFolder.DefaultFolder, "crash.log");
+
+    /// <summary>Saved custom data folder that could not be used this session, if any.</summary>
+    public static string? UnavailableDataFolder { get; private set; }
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -34,7 +36,9 @@ public partial class App : Application
 
         try
         {
-            Store = new SettingsStore();
+            var data = DataFolder.Resolve(DataFolder.DefaultFolder);
+            UnavailableDataFolder = data.UnavailableFolder;
+            Store = new SettingsStore(data.Folder);
             State = new AppState(Store);
             Scheduler = new PromptScheduler(State);
             State.RestoreSessionIfAny();
@@ -42,6 +46,17 @@ public partial class App : Application
             var window = new MainWindow();
             MainWindow = window;
             window.Show();
+
+            if (UnavailableDataFolder is not null)
+                window.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
+                    MessageBox.Show(window,
+                        "Timesheet Buddy could not open your data folder:\n" + UnavailableDataFolder +
+                        "\n\nIt may be on a drive that is not connected. This session uses the default folder instead:\n" +
+                        data.Folder +
+                        "\n\nYour folder choice is kept, so the next start uses it again once it is available.",
+                        "Timesheet Buddy",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning));
         }
         catch (Exception ex)
         {
@@ -68,6 +83,31 @@ public partial class App : Application
         e.Handled = true;
         if (Windows.Count == 0)
             Shutdown(1);
+    }
+
+    internal static void ClearUnavailableDataFolder() => UnavailableDataFolder = null;
+
+    /// <summary>Starts a fresh copy of the app, then closes this one (the main window saves on close).</summary>
+    internal static void Restart()
+    {
+        try
+        {
+            var exe = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(exe))
+                throw new InvalidOperationException("The program path is unknown.");
+            Process.Start(new ProcessStartInfo(exe) { UseShellExecute = false });
+        }
+        catch (Exception ex)
+        {
+            WriteCrashLog(ex);
+            MessageBox.Show(
+                "Timesheet Buddy could not restart itself. Please start it again.\n\n" + ex.Message,
+                "Timesheet Buddy",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+
+        Current.Shutdown();
     }
 
     internal static void WriteCrashLog(Exception ex)

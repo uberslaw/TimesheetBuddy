@@ -18,8 +18,7 @@ public partial class DayLogWindow : Window
         InitializeComponent();
         _day = dayLocal.Date;
 
-        var folder = Path.GetDirectoryName(App.Store.StoragePath)!;
-        _notesPath = Path.Combine(folder, $"day-notes-{_day:yyyyMMdd}.txt");
+        _notesPath = Path.Combine(App.Store.Folder, $"day-notes-{_day:yyyyMMdd}.txt");
         if (File.Exists(_notesPath))
             DayNotesBox.Text = File.ReadAllText(_notesPath);
 

@@ -9,7 +9,7 @@
     <DockPanel Margin="14">
         <DockPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
             <TextBlock VerticalAlignment="Center" Foreground="{StaticResource MutedBrush}" FontSize="11"
-                       Text="Settings are saved to your local AppData folder."/>
+                       Text="Settings are saved to your data folder (see the Data tab)."/>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Style="{StaticResource CompactButton}" Content="Cancel" Width="90" Margin="0,0,8,0"
                         IsCancel="True" Click="Cancel_Click"/>
@@ -126,6 +126,33 @@
                                   Content="Also when the main window is on another monitor"
                                   ToolTip="The main window's centre is off the primary monitor for about 2 seconds"/>
                     </StackPanel>
+                </StackPanel>
+            </TabItem>
+
+            <TabItem x:Name="DataTab" Header="Data">
+                <StackPanel Margin="10">
+                    <TextBlock FontWeight="SemiBold" Text="Data folder" Margin="0,0,0,6"/>
+                    <TextBox x:Name="DataFolderBox" IsReadOnly="True" Padding="6,3"
+                             VerticalContentAlignment="Center" MinHeight="26"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <Button Style="{StaticResource CompactButton}" Content="Browse…" Padding="12,3"
+                                ToolTip="Choose another folder; your data is moved there as soon as you confirm"
+                                Click="BrowseDataFolder_Click"/>
+                        <Button Style="{StaticResource CompactButton}" Content="Open folder" Padding="12,3"
+                                Margin="8,0,0,0" ToolTip="Show this folder in File Explorer"
+                                Click="OpenDataFolder_Click"/>
+                        <Button x:Name="UseDefaultFolderButton" Style="{StaticResource CompactButton}"
+                                Content="Use default" Padding="12,3" Margin="8,0,0,0"
+                                Click="UseDefaultFolder_Click"/>
+                    </StackPanel>
+                    <TextBlock TextWrapping="Wrap" Margin="0,10,0,0" Foreground="{StaticResource MutedBrush}"
+                               Text="Your time entries, settings and day notes are stored here."/>
+                    <TextBlock TextWrapping="Wrap" Margin="0,4,0,0" Foreground="{StaticResource MutedBrush}"
+                               Text="Changing the folder happens straight away, when you confirm it, not when you press Save, and Cancel does not undo it. Your data is copied to the new folder; the old copy is left in place as a backup."/>
+                    <TextBlock x:Name="CrashLogNote" TextWrapping="Wrap" Margin="0,4,0,0"
+                               Foreground="{StaticResource MutedBrush}"/>
+                    <TextBlock x:Name="UnavailableFolderText" TextWrapping="Wrap" Margin="0,10,0,0"
+                               Foreground="#B45309" FontWeight="SemiBold" Visibility="Collapsed"/>
                 </StackPanel>
             </TabItem>
         </TabControl>

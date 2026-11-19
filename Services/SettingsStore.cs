@@ -14,14 +14,7 @@ public sealed class SettingsStore
         NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals
     };
 
-    private readonly string _path;
-
-    public SettingsStore()
-        : this(Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "TimesheetBuddy"))
-    {
-    }
+    private string _path;
 
     public SettingsStore(string folder)
     {
@@ -30,6 +23,15 @@ public sealed class SettingsStore
     }
 
     public string StoragePath => _path;
+
+    /// <summary>Data folder in use: settings.json and the day notes live here.</summary>
+    public string Folder => Path.GetDirectoryName(_path)!;
+
+    /// <summary>Later saves go to settings.json in <paramref name="folder"/>; nothing is read or written now.</summary>
+    public void SwitchFolder(string folder)
+    {
+        _path = Path.Combine(Path.GetFullPath(folder), "settings.json");
+    }
 
     public AppSettings Load()
     {

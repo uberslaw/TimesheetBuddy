@@ -11,7 +11,7 @@ Desktop timesheet helper for logging time against job codes through the day. Com
 | UI | WPF |
 | Runtime | .NET 10 (`net10.0-windows`) |
 | Language | C# |
-| Persistence | JSON under `%LocalAppData%\TimesheetBuddy\` |
+| Persistence | JSON in the data folder (default `%LocalAppData%\TimesheetBuddy\`, changeable in Settings → Data) |
 | OS | Windows only (will not run on macOS/Linux) |
 
 ## Layout (download this folder)
@@ -23,7 +23,8 @@ TimesheetBuddy/
 ├── MainWindow.xaml / .cs           # Compact tracker UI + prompt orchestration
 ├── Models/                         # JobCode, FavoriteTask, TimeEntry, AppSettings
 ├── Services/
-│   ├── SettingsStore.cs            # Load/save settings.json
+│   ├── SettingsStore.cs            # Load/save settings.json in the current data folder (switchable)
+│   ├── DataFolder.cs               # Data folder pointer, start-up resolution + fallback, copy/backup plan (pure)
 │   ├── AppState.cs                 # Timer session, entries, settings mutations
 │   ├── UnaccountedTime.cs          # Catch-up overlap: unaccounted minutes vs still-working
 │   ├── NoTaskTime.cs               # "No Task Selected" runs: 1-minute rule, open spans, placement
@@ -41,7 +42,8 @@ TimesheetBuddy/
 │   ├── WindowVisibility.cs         # Win32: z-order walk for coverage, primary-monitor check
 │   └── ScreenLockWatcher.cs        # SessionLock / SessionUnlock → prompt
 ├── Views/
-│   ├── SettingsWindow.*            # Job codes, favorites, categories, prompts, widget
+│   ├── SettingsWindow.*            # Job codes, favorites, categories, prompts, widget, data folder
+│   ├── DataFolderChoiceWindow.*    # Target folder already has data: Use existing / Replace / Cancel
 │   ├── RecheckWindow.*             # “Still working on X?”
 │   ├── FifteenMinuteWindow.*       # Assign unaccounted minutes to active/today/new task
 │   ├── NoTaskAssignWindow.*        # Split pending No Task Selected time across tasks / Break
@@ -97,7 +99,8 @@ Requires [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) on Win
 | Assign No Task Selected time (next interval; split across tasks, All to Break, Not now) | `MainWindow.OnFifteenDue` → `Views/NoTaskAssignWindow` → `AppState.AssignNoTaskTime` |
 | Quick-add favorites menu | `MainWindow.QuickAdd_Click` |
 | Menu → Add job code… | `Views/QuickAddJobCodeWindow` → `AppState.AddJobCode` |
-| Settings (codes, favorites, categories, intervals, Widget tab); Menu → Settings… | `Views/SettingsWindow` |
+| Settings (codes, favorites, categories, intervals, Widget and Data tabs); Menu → Settings… | `Views/SettingsWindow` |
+| Data folder (Settings → Data: current path, Browse…, Open folder, Use default; copy / use existing / replace) | `SettingsWindow.ChangeDataFolder` → `Services/DataFolder` + `SettingsStore.SwitchFolder`; `Views/DataFolderChoiceWindow`; start-up in `App.OnStartup` |
 | Still-working recheck popup | `PromptScheduler` → `Views/RecheckWindow` (skipped in history) |
 | Catch-up prompt (only when minutes are unaccounted; Not now dismisses) | `PromptScheduler` → `UnaccountedTime` → `Views/FifteenMinuteWindow` or `RecheckWindow` |
 | Title bar (Pin, Menu, minimize, close) and Menu (Day log…, Weeks & export…, Job code view, Settings…, Add job code…, Restore deleted tasks…, Load timesheet…) | `MainWindow.xaml` + `MainWindow.Menu_Click` |
@@ -117,9 +120,15 @@ Requires [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) on Win
 
 | File | Contents |
 |------|----------|
-| `%LocalAppData%\TimesheetBuddy\settings.json` | Job codes, favorites, categories, prompt prefs, window position, timer widget toggles (`showTimerWidget`, `showTimerWidgetWhenCovered`, `showTimerWidgetOnOtherMonitor`) + position, job-code view order (`jobCodeViewIds`), all time entries, active session, running No Task Selected start (`noTaskStartedUtc`) and pending unassigned spans (`unassignedSegments`) |
-| `%LocalAppData%\TimesheetBuddy\day-notes-yyyyMMdd.txt` | Per-day free-text notes from the day log |
-| `%LocalAppData%\TimesheetBuddy\crash.log` | Unhandled exceptions. Startup failures also show a dialog with this path |
+| `<data folder>\settings.json` | Job codes, favorites, categories, prompt prefs, window position, timer widget toggles (`showTimerWidget`, `showTimerWidgetWhenCovered`, `showTimerWidgetOnOtherMonitor`) + position, job-code view order (`jobCodeViewIds`), all time entries, active session, running No Task Selected start (`noTaskStartedUtc`) and pending unassigned spans (`unassignedSegments`) |
+| `<data folder>\day-notes-yyyyMMdd.txt` | Per-day free-text notes from the day log |
+| `<data folder>\settings.json.bak-yyyyMMddHHmmss` (and `day-notes-….txt.bak-…`) | Left by Settings → Data → Replace: the target folder's own file before it was overwritten |
+| `%LocalAppData%\TimesheetBuddy\datafolder.json` | Pointer to a custom data folder, `{ "dataFolder": "D:\\…" }`. Always in the default folder; absent or blank = default |
+| `%LocalAppData%\TimesheetBuddy\crash.log` | Unhandled exceptions. Always in the default folder, even with a custom data folder. Startup failures also show a dialog with this path |
+
+The data folder is `%LocalAppData%\TimesheetBuddy\` unless `datafolder.json` names another one. `App.OnStartup` calls `DataFolder.Resolve`: if the named folder is missing or not writable (e.g. an unplugged USB or network drive) the session uses the default folder, nothing is created in the missing one, the pointer is left as is (so the next start uses it again once it is back), and one warning names the missing folder after the window shows.
+
+**Changing the data folder (Settings → Data).** Happens when the user confirms, not on Save (Cancel does not undo it; the tab says so). Browse… opens `OpenFolderDialog` ("Choose a folder for Timesheet Buddy data", starting in the current folder); Use default targets `%LocalAppData%\TimesheetBuddy`; Open folder runs `explorer.exe` on it. `DataFolder.Plan` decides: same folder → nothing (except, after a fallback, picking the folder in use clears the stale pointer); missing or not writable (temp file create/delete fails) → error, nothing changes; no `settings.json` there → OK/Cancel, then save in-memory state to the old folder, copy `settings.json` and `day-notes-*.txt` (copy, not move), switch the store, save again to the new folder and write the pointer, with no restart; the user is told the old copy was left in place. A target that already has `settings.json` opens `DataFolderChoiceWindow`: **Replace** does the same copy but first renames the target's `settings.json` (and any day-notes file it overwrites) to `….bak-yyyyMMddHHmmss`; **Use existing** stops a running timer and saves everything to the old folder (the dialog warns about the timer), writes the pointer, says it will restart, starts a new copy of the exe and shuts down. Check: `dotnet run --project tests/DataFolderCheck`.
 
 Defaults seed a few job codes (`ADMIN`, `DEV`, `MTG`, `SUP`) and sample favorites on first launch.
 
@@ -192,7 +201,8 @@ Other reasonable next steps if needed:
 
 17. Type `INC0012345` in Ticket → Job code becomes 03 — SERVICE-NOW, Category becomes Support, and the timer has not started (big counter and status unchanged). Change the category to General, keep typing digits → it stays General. Enter a task name, click Add → a row `INC0012345 · task name` appears under Today by task, turns green and the timer runs; the status reads `Tracking: INC0012345 · task name` and the boxes keep their text. Type `RITM0012345` and click Add → a separate row starts and the first stops. Type `INCOMING` → nothing changes. With no 03 / ServiceNow code in Settings, typing a ticket leaves the job code alone and shows the hint. Export the week to Excel → the Ticket column has the ticket.
 18. Log time on three or four codes → each band row shows a grey `NN%` right of its time, the column lines up, the values add to 100, Total / Time Remaining / No Task Selected show none, and the big counter has not moved. Let the timer run → the running code's share creeps up on the tick without the rows shifting. On a fresh day with nothing logged → no percentages.
+19. Settings → Data shows the current folder (`%LocalAppData%\TimesheetBuddy` on a fresh install). Open folder → Explorer opens it. Browse… → pick an empty folder → confirm → the box shows the new path; the old folder still has `settings.json`; the new one has `settings.json` and the `day-notes-*.txt` files; `%LocalAppData%\TimesheetBuddy\datafolder.json` names it. Start a timer, add a day note, close and relaunch → both are there and the new folder's files changed. Browse… → a read-only folder → error, nothing changes. Browse… the folder in use → nothing happens. Use default → the default already has data → Replace → the default's old `settings.json` is now `settings.json.bak-…` and today's entries are kept. Choose a folder with other data → Use existing (with a timer running: the dialog warns, the timer is saved to the old folder) → the app restarts showing that data. With a custom folder on a USB stick, close the app, unplug it, launch → one warning names the folder and the app runs on the default folder; `datafolder.json` is unchanged; plug it back in and relaunch → the custom folder is used again.
 
 ## Contact / ownership
 
-Built as a greenfield Cursor cloud agent project. No external services, auth, or cloud sync — all data is local to the Windows user profile.
+Built as a greenfield Cursor cloud agent project. No external services, auth, or cloud sync — all data is local: the Windows user profile by default, or the folder chosen in Settings → Data.
