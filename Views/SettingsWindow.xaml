@@ -110,12 +110,21 @@
                 <StackPanel Margin="10">
                     <TextBlock FontWeight="SemiBold" Text="Show when minimized" Margin="0,0,0,6"/>
                     <TextBlock TextWrapping="Wrap" Margin="0,0,0,8" Foreground="{StaticResource MutedBrush}"
-                               Text="A small always-on-top timer with Start, Stop and corner-dock arrows while the main window is minimized."/>
+                               Text="A small always-on-top timer with Start, Stop and corner-dock arrows while the main window is minimized or hidden."/>
                     <StackPanel Orientation="Horizontal">
                         <RadioButton x:Name="WidgetEnableRadio" GroupName="WidgetShow" Content="Enable"
                                      Margin="0,0,16,0" VerticalContentAlignment="Center"/>
                         <RadioButton x:Name="WidgetDisableRadio" GroupName="WidgetShow" Content="Disable"
                                      VerticalContentAlignment="Center"/>
+                    </StackPanel>
+                    <StackPanel Margin="0,10,0,0"
+                                IsEnabled="{Binding IsChecked, ElementName=WidgetEnableRadio, FallbackValue=False}">
+                        <CheckBox x:Name="WidgetCoveredCheck" Margin="0,0,0,6"
+                                  Content="Also when the main window is covered by other windows"
+                                  ToolTip="Unpinned and at least half hidden behind other apps for about 2 seconds"/>
+                        <CheckBox x:Name="WidgetOtherMonitorCheck"
+                                  Content="Also when the main window is on another monitor"
+                                  ToolTip="The main window's centre is off the primary monitor for about 2 seconds"/>
                     </StackPanel>
                 </StackPanel>
             </TabItem>

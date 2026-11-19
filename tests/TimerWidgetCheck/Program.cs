@@ -125,6 +125,101 @@ Check(ReferenceEquals(AppState.LatestWorkedEntry([yesterdayLate, todayBreak], to
     "with nothing real today, Start resumes the most recent earlier task");
 Check(AppState.LatestWorkedEntry([todayBreak, todayDeleted], today) is null, "nothing to resume opens the app instead");
 
+// Coverage: share of the main window hidden by the union of other windows.
+bool Near(double a, double b) => Math.Abs(a - b) < 1e-9;
+var mainRect = new WidgetArea(100, 100, 500, 400); // 400 x 300
+Check(WidgetVisibilityRules.CoveredFraction(mainRect, []) == 0, "no covers: 0%");
+Check(Near(WidgetVisibilityRules.CoveredFraction(mainRect, [new WidgetArea(100, 100, 300, 400)]), 0.5),
+    "left half covered: 50%");
+Check(Near(WidgetVisibilityRules.CoveredFraction(mainRect, [new WidgetArea(400, 300, 900, 900)]), 100.0 * 100 / 120000),
+    "a cover hanging off the corner only counts its overlap");
+Check(Near(WidgetVisibilityRules.CoveredFraction(mainRect, [new WidgetArea(0, 0, 1920, 1080)]), 1),
+    "a full-screen app covers it completely");
+Check(Near(WidgetVisibilityRules.CoveredFraction(mainRect,
+        [new WidgetArea(100, 100, 300, 400), new WidgetArea(200, 100, 400, 400)]), 0.75),
+    "overlapping covers are not double counted");
+Check(Near(WidgetVisibilityRules.CoveredFraction(mainRect,
+        [new WidgetArea(100, 100, 300, 400), new WidgetArea(100, 100, 300, 400)]), 0.5),
+    "the same cover twice still counts once");
+Check(Near(WidgetVisibilityRules.CoveredFraction(mainRect,
+        [new WidgetArea(100, 100, 300, 250), new WidgetArea(300, 250, 500, 400)]), 0.5),
+    "two disjoint quarters add up to half");
+Check(WidgetVisibilityRules.CoveredFraction(mainRect,
+        [new WidgetArea(600, 100, 900, 400), new WidgetArea(100, 500, 500, 800), new WidgetArea(500, 100, 700, 400)]) == 0,
+    "covers outside (or only touching) the main window are ignored");
+Check(WidgetVisibilityRules.CoveredFraction(mainRect, [new WidgetArea(200, 200, 200, 300), new WidgetArea(300, 300, 250, 350)]) == 0,
+    "empty or inverted cover rects are ignored");
+Check(WidgetVisibilityRules.CoveredFraction(new WidgetArea(0, 0, 0, 0), [new WidgetArea(0, 0, 10, 10)]) == 0,
+    "an empty main rect is never covered");
+var grid = new List<WidgetArea>();
+for (var gx = 0; gx < 4; gx++)
+for (var gy = 0; gy < 3; gy++)
+    grid.Add(new WidgetArea(100 + gx * 100 - 10, 100 + gy * 100 - 10, 100 + gx * 100 + 110, 100 + gy * 100 + 110));
+Check(Near(WidgetVisibilityRules.CoveredFraction(mainRect, grid), 1), "many overlapping tiles still total 100%");
+var acc = new CoverageAccumulator(mainRect);
+acc.Add(new WidgetArea(100, 100, 300, 400));
+Check(acc.CoveredFraction >= WidgetVisibilityRules.CoveredThreshold, "accumulator reaches the threshold for an early stop");
+
+// Primary monitor: the main window's centre decides.
+var primaryMon = new WidgetArea(0, 0, 1920, 1080);
+Check(WidgetVisibilityRules.CentreIsOn(new WidgetArea(1400, 600, 1880, 1040), primaryMon), "window on the primary");
+Check(WidgetVisibilityRules.CentreIsOn(new WidgetArea(1600, 600, 2080, 1040), primaryMon), "straddling, centre still on primary");
+Check(!WidgetVisibilityRules.CentreIsOn(new WidgetArea(1800, 600, 2280, 1040), primaryMon), "straddling, centre on the second monitor");
+Check(!WidgetVisibilityRules.CentreIsOn(new WidgetArea(-1000, 100, -520, 540), primaryMon), "on a monitor left of the primary");
+
+// Show/hide decision.
+var allOn = new WidgetVisibilityOptions(true, true, true);
+var visibleMain = new MainWindowSnapshot(Minimized: false, Hidden: false, Topmost: false, CoveredFraction: 0, OnPrimaryMonitor: true);
+Check(WidgetVisibilityRules.Decide(visibleMain, allOn) == WidgetShowReason.None, "visible, unobscured, on primary: hide");
+Check(WidgetVisibilityRules.Decide(visibleMain with { Minimized = true }, allOn) == WidgetShowReason.Minimized, "minimized: show");
+Check(WidgetVisibilityRules.Decide(visibleMain with { Hidden = true }, allOn) == WidgetShowReason.Hidden, "hidden: show");
+Check(WidgetVisibilityRules.Decide(visibleMain with { CoveredFraction = 0.5 }, allOn) == WidgetShowReason.Covered, "50% covered: show");
+Check(WidgetVisibilityRules.Decide(visibleMain with { CoveredFraction = 0.49 }, allOn) == WidgetShowReason.None, "49% covered: hide");
+Check(WidgetVisibilityRules.Decide(visibleMain with { OnPrimaryMonitor = false }, allOn) == WidgetShowReason.OtherMonitor,
+    "on another monitor: show");
+Check(WidgetVisibilityRules.Decide(visibleMain with { Topmost = true, CoveredFraction = 0.9 }, allOn) == WidgetShowReason.None,
+    "pinned on the primary: hide even if a topmost app overlaps");
+Check(WidgetVisibilityRules.Decide(visibleMain with { Topmost = true, OnPrimaryMonitor = false }, allOn) == WidgetShowReason.OtherMonitor,
+    "pinned but on another monitor: show");
+Check(WidgetVisibilityRules.Decide(visibleMain with { Topmost = true, Minimized = true }, allOn) == WidgetShowReason.Minimized,
+    "pinned and minimized: show");
+var masterOff = allOn with { Enabled = false };
+Check(WidgetVisibilityRules.Decide(visibleMain with { Minimized = true }, masterOff) == WidgetShowReason.None, "master Disable: never minimized");
+Check(WidgetVisibilityRules.Decide(visibleMain with { CoveredFraction = 1, OnPrimaryMonitor = false }, masterOff) == WidgetShowReason.None,
+    "master Disable: never covered or other monitor");
+var minimizeOnly = new WidgetVisibilityOptions(true, false, false);
+Check(WidgetVisibilityRules.Decide(visibleMain with { CoveredFraction = 1 }, minimizeOnly) == WidgetShowReason.None, "covered option off");
+Check(WidgetVisibilityRules.Decide(visibleMain with { OnPrimaryMonitor = false }, minimizeOnly) == WidgetShowReason.None, "other-monitor option off");
+Check(WidgetVisibilityRules.Decide(visibleMain with { Hidden = true }, minimizeOnly) == WidgetShowReason.Hidden,
+    "hidden still counts with both options off");
+Check(WidgetVisibilityRules.Decide(visibleMain with { OnPrimaryMonitor = false, CoveredFraction = 1 }, allOn with { WhenOtherMonitor = false })
+      == WidgetShowReason.Covered, "covered still applies with the monitor option off");
+Check(WidgetVisibilityRules.Decide(visibleMain with { Minimized = true }, allOn, closing: true) == WidgetShowReason.None, "closing: hide");
+Check(WidgetVisibilityRules.Decide(visibleMain with { OnPrimaryMonitor = false, ModalOpen = true }, allOn) == WidgetShowReason.None,
+    "a prompt or dialog is open: hide");
+var fresh = new AppSettings();
+Check(fresh.ShowTimerWidget && fresh.ShowTimerWidgetWhenCovered && fresh.ShowTimerWidgetOnOtherMonitor, "all widget options default on");
+var oldJson = System.Text.Json.JsonSerializer.Deserialize<AppSettings>("{\"ShowTimerWidget\":true}")!;
+Check(oldJson.ShowTimerWidgetWhenCovered && oldJson.ShowTimerWidgetOnOtherMonitor, "missing options in old settings.json read as on");
+
+// Hysteresis.
+var gate = new WidgetVisibilityGate();
+Check(gate.Update(WidgetShowReason.Minimized, fromPoll: false), "minimize shows at once");
+Check(!gate.Update(WidgetShowReason.None, fromPoll: false), "restore hides at once");
+Check(!gate.Update(WidgetShowReason.Covered, fromPoll: false), "covered on an event alone does not show");
+Check(!gate.Update(WidgetShowReason.Covered, fromPoll: true), "covered for one poll: still hidden");
+Check(gate.Update(WidgetShowReason.Covered, fromPoll: true), "covered for two polls: shown");
+Check(gate.Update(WidgetShowReason.Covered, fromPoll: false), "stays shown while covered");
+Check(!gate.Update(WidgetShowReason.None, fromPoll: false), "activating the main window hides at once");
+gate.Update(WidgetShowReason.OtherMonitor, fromPoll: true);
+Check(!gate.Update(WidgetShowReason.None, fromPoll: true), "a one-poll blip resets");
+Check(!gate.Update(WidgetShowReason.OtherMonitor, fromPoll: true), "the count restarts after a blip");
+Check(gate.Update(WidgetShowReason.OtherMonitor, fromPoll: true), "other monitor for two polls: shown");
+Check(gate.Update(WidgetShowReason.Covered, fromPoll: true), "switching between delayed reasons keeps it shown");
+gate.Reset();
+Check(!gate.Shown && !gate.Update(WidgetShowReason.OtherMonitor, fromPoll: true), "reset (prompt or widget click) starts the delay again");
+Check(gate.Update(WidgetShowReason.Hidden, fromPoll: false), "hide shows at once even mid-delay");
+
 if (failures.Count == 0)
 {
     Console.WriteLine("All timer widget checks passed.");

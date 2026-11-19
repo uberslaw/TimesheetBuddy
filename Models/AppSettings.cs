@@ -12,6 +12,8 @@ public sealed class AppSettings
     public double? WindowTop { get; set; }
     public double? WindowHeight { get; set; }
     public bool ShowTimerWidget { get; set; } = true;
+    public bool ShowTimerWidgetWhenCovered { get; set; } = true;
+    public bool ShowTimerWidgetOnOtherMonitor { get; set; } = true;
     public double? WidgetLeft { get; set; }
     public double? WidgetTop { get; set; }
     public List<JobCode> JobCodes { get; set; } = [];

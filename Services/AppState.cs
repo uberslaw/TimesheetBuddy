@@ -911,11 +911,15 @@ public sealed class AppState : INotifyPropertyChanged
         Persist();
     }
 
-    public void SetShowTimerWidget(bool show)
+    public void SetTimerWidgetOptions(bool show, bool whenCovered, bool onOtherMonitor)
     {
-        if (_settings.ShowTimerWidget == show)
+        if (_settings.ShowTimerWidget == show &&
+            _settings.ShowTimerWidgetWhenCovered == whenCovered &&
+            _settings.ShowTimerWidgetOnOtherMonitor == onOtherMonitor)
             return;
         _settings.ShowTimerWidget = show;
+        _settings.ShowTimerWidgetWhenCovered = whenCovered;
+        _settings.ShowTimerWidgetOnOtherMonitor = onOtherMonitor;
         Persist();
         SettingsChanged?.Invoke(this, EventArgs.Empty);
     }

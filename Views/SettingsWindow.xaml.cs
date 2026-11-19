@@ -28,6 +28,8 @@ public partial class SettingsWindow : Window
         AlwaysOnTopCheck.IsChecked = state.Settings.AlwaysOnTop;
         WidgetEnableRadio.IsChecked = state.Settings.ShowTimerWidget;
         WidgetDisableRadio.IsChecked = !state.Settings.ShowTimerWidget;
+        WidgetCoveredCheck.IsChecked = state.Settings.ShowTimerWidgetWhenCovered;
+        WidgetOtherMonitorCheck.IsChecked = state.Settings.ShowTimerWidgetOnOtherMonitor;
         RecheckEnabledCheck.IsChecked = state.Settings.RecheckPromptEnabled;
         FifteenEnabledCheck.IsChecked = state.Settings.FifteenMinutePromptEnabled;
 
@@ -109,7 +111,10 @@ public partial class SettingsWindow : Window
             RecheckMinutes.SelectedItem as int? ?? 30,
             FifteenEnabledCheck.IsChecked == true,
             FifteenMinutes.SelectedItem as int? ?? 15);
-        App.State.SetShowTimerWidget(WidgetDisableRadio.IsChecked != true);
+        App.State.SetTimerWidgetOptions(
+            WidgetDisableRadio.IsChecked != true,
+            WidgetCoveredCheck.IsChecked == true,
+            WidgetOtherMonitorCheck.IsChecked == true);
 
         DialogResult = true;
         Close();

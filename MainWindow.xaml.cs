@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using TimesheetBuddy.Models;
@@ -24,6 +25,7 @@ public partial class MainWindow : Window
     private readonly HashSet<string> _expandedKeys = new(StringComparer.Ordinal);
     private JobCodeViewWindow? _jobCodeView;
     private TimerWidgetWindow? _widget;
+    private readonly WidgetVisibilityGate _widgetGate = new();
     private TaskTypeRowModel? _pressedRow;
     private DateTime _taskRowsDay = DateTime.Today;
     private bool _taskRebuildQueued;
@@ -45,9 +47,9 @@ public partial class MainWindow : Window
         _state.SettingsChanged += (_, _) =>
         {
             ReloadSelectors();
-            if (!_state.Settings.ShowTimerWidget)
-                HideTimerWidget();
+            UpdateTimerWidget();
         };
+        IsVisibleChanged += (_, _) => UpdateTimerWidget();
         _state.ViewingDateChanged += (_, _) => Dispatcher.Invoke(() =>
         {
             ApplyModeUi();
@@ -199,6 +201,9 @@ public partial class MainWindow : Window
             _positionDirty = false;
             SavePlacement();
         }
+
+        // Other apps moving in front raise no event in this process, so the tick re-checks.
+        UpdateTimerWidget(fromPoll: true);
 
         if (_state.IsHistoryMode)
         {
@@ -698,6 +703,7 @@ public partial class MainWindow : Window
     {
         var pinned = PinToggle.IsChecked == true;
         Topmost = pinned;
+        UpdateTimerWidget();
         _state.UpdatePromptSettings(
             pinned,
             _state.Settings.RecheckPromptEnabled,
@@ -1146,6 +1152,7 @@ public partial class MainWindow : Window
     {
         if (WindowState == WindowState.Minimized)
             WindowState = WindowState.Normal;
+        _widgetGate.Reset();
         HideTimerWidget();
         Activate();
         // Force above other windows while a prompt is shown.
@@ -1155,23 +1162,58 @@ public partial class MainWindow : Window
     private void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
 
     // Covers the minimize button, taskbar clicks and Win+M, which all change WindowState.
-    private void Window_StateChanged(object? sender, EventArgs e)
+    private void Window_StateChanged(object? sender, EventArgs e) => UpdateTimerWidget();
+
+    private void Window_Activated(object? sender, EventArgs e) => UpdateTimerWidget();
+
+    private void Window_Deactivated(object? sender, EventArgs e) => UpdateTimerWidget();
+
+    /// <summary>
+    /// Shows the widget whenever the user cannot see this window on the primary monitor
+    /// (<see cref="WidgetVisibilityRules.Decide"/>), through the hysteresis in <see cref="WidgetVisibilityGate"/>.
+    /// </summary>
+    private void UpdateTimerWidget(bool fromPoll = false)
     {
-        if (WindowState == WindowState.Minimized)
+        if (_closing || !IsLoaded)
+            return;
+
+        var settings = _state.Settings;
+        var options = new WidgetVisibilityOptions(
+            settings.ShowTimerWidget,
+            settings.ShowTimerWidgetWhenCovered,
+            settings.ShowTimerWidgetOnOtherMonitor);
+        var minimized = WindowState == WindowState.Minimized;
+        var hidden = Visibility != Visibility.Visible || !IsVisible;
+        var modal = ComponentDispatcher.IsThreadModal;
+
+        // Only walk windows when the answer can change the outcome.
+        var onPrimary = true;
+        var covered = 0.0;
+        if (options.Enabled && !minimized && !hidden && !modal)
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (options.WhenOtherMonitor)
+                onPrimary = WindowVisibility.IsOnPrimaryMonitor(hwnd);
+            if (options.WhenCovered && onPrimary && !Topmost)
+                covered = WindowVisibility.CoveredFraction(hwnd);
+        }
+
+        var reason = WidgetVisibilityRules.Decide(
+            new MainWindowSnapshot(minimized, hidden, Topmost, covered, onPrimary, modal),
+            options,
+            _closing);
+        if (_widgetGate.Update(reason, fromPoll))
             ShowTimerWidget();
         else
-            HideTimerWidget();
-    }
-
-    private void Window_Activated(object? sender, EventArgs e)
-    {
-        if (WindowState != WindowState.Minimized)
             HideTimerWidget();
     }
 
     private void ShowTimerWidget()
     {
         if (_closing || !_state.Settings.ShowTimerWidget)
+            return;
+
+        if (_widget is { IsVisible: true })
             return;
 
         if (_widget is null)
@@ -1210,6 +1252,7 @@ public partial class MainWindow : Window
             return;
         if (WindowState == WindowState.Minimized)
             WindowState = WindowState.Normal;
+        _widgetGate.Reset();
         HideTimerWidget();
         Activate();
     }
@@ -1222,12 +1265,18 @@ public partial class MainWindow : Window
             DragMove();
     }
 
-    private void Window_LocationChanged(object? sender, EventArgs e) => _positionDirty = true;
+    private void Window_LocationChanged(object? sender, EventArgs e)
+    {
+        _positionDirty = true;
+        UpdateTimerWidget();
+    }
 
     private void Window_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (IsLoaded)
-            _positionDirty = true;
+        if (!IsLoaded)
+            return;
+        _positionDirty = true;
+        UpdateTimerWidget();
     }
 
     private void Window_Closing(object? sender, CancelEventArgs e)

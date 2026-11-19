@@ -10,7 +10,7 @@ using TimesheetBuddy.Services;
 namespace TimesheetBuddy.Views;
 
 /// <summary>
-/// Small always-on-top timer shown while the main window is minimized.
+/// Small always-on-top timer shown while the main window can't be seen (see <see cref="WidgetVisibilityRules"/>).
 /// It has no Owner on purpose: owned windows are hidden when their owner minimizes.
 /// </summary>
 /// <remarks>
