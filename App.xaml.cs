@@ -12,6 +12,8 @@ public partial class App : Application
     public static PromptScheduler Scheduler { get; private set; } = null!;
     public static SettingsStore Store { get; private set; } = null!;
     public static AppTracker AppTracker { get; private set; } = null!;
+    public static ClientIdentity Client { get; private set; } = null!;
+    public static ChangeJournal Journal { get; private set; } = null!;
 
     /// <summary>Always in the default folder so it works when a custom data folder is unavailable.</summary>
     public static string CrashLogPath { get; } = Path.Combine(DataFolder.DefaultFolder, "crash.log");
@@ -39,8 +41,12 @@ public partial class App : Application
         {
             var data = DataFolder.Resolve(DataFolder.DefaultFolder);
             UnavailableDataFolder = data.UnavailableFolder;
-            Store = new SettingsStore(data.Folder);
-            State = new AppState(Store);
+            Client = ClientIdentity.LoadOrCreate(DataFolder.DefaultFolder);
+            Store = new SettingsStore(data.Folder) { Client = Client };
+            Journal = new ChangeJournal(() => Store.Folder, Client);
+            State = new AppState(Store) { Journal = Journal };
+            Journal.PruneOwn();
+            Journal.PruneAbandoned();
             Scheduler = new PromptScheduler(State);
             State.RestoreSessionIfAny();
             AppTracker = new AppTracker(() => Store.Folder);
@@ -50,6 +56,8 @@ public partial class App : Application
             var window = new MainWindow();
             MainWindow = window;
             window.Show();
+            window.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle,
+                () => StartPresence(() => window.IsScreenLocked));
 
             if (UnavailableDataFolder is not null)
                 window.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
@@ -91,7 +99,9 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        AppTracker?.Stop();
+        if (!ClosingWithoutSave)
+            AppTracker?.Stop();
+        Presence?.Stop(deleteFile: true);
         base.OnExit(e);
     }
 

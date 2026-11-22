@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using TimesheetBuddy.Models;
+using TimesheetBuddy.Services;
 
 namespace TimesheetBuddy.Views;
 
@@ -62,6 +63,7 @@ public partial class DayLogWindow : Window
 
     private void DayNotesBox_LostFocus(object sender, RoutedEventArgs e)
     {
-        File.WriteAllText(_notesPath, DayNotesBox.Text ?? string.Empty);
+        if (App.ClosingWithoutSave) return;
+        IoRetry.WriteAllTextAtomic(_notesPath, DayNotesBox.Text ?? string.Empty);
     }
 }

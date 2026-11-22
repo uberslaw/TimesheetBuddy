@@ -40,6 +40,7 @@ public sealed class AppState : INotifyPropertyChanged
         Categories = new ObservableCollection<string>(_settings.Categories);
         TodayEntries = new ObservableCollection<TimeEntry>(
             EntriesForDay(DateTime.Today).Reverse());
+        _store.ExternalChangesMerged += _ => ReloadFromSettings();
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -52,6 +53,43 @@ public sealed class AppState : INotifyPropertyChanged
     public ObservableCollection<TimeEntry> TodayEntries { get; }
 
     public AppSettings Settings => _settings;
+
+    /// <summary>Change log for this install; null in checks.</summary>
+    public ChangeJournal? Journal { get; set; }
+
+    private (string From, string To, string Key, DateTime AtUtc)? _pendingRename;
+
+    private void Log(string action, string summary, Guid? entryId = null)
+    {
+        FlushRename(force: true);
+        Journal?.Append(action, summary + DaySuffix, entryId);
+    }
+
+    /// <summary>Live renames (one per keystroke) become one journal line once typing pauses.</summary>
+    private void NoteRename(string fromKey, string fromLabel, string newKey, string to)
+    {
+        if (_pendingRename is { } pending && pending.Key == fromKey)
+            fromLabel = pending.From;
+        else
+            FlushRename(force: true);
+        _pendingRename = (fromLabel, to, newKey, DateTime.UtcNow);
+    }
+
+    private void FlushRename(bool force)
+    {
+        if (_pendingRename is not { } pending) return;
+        if (!force && DateTime.UtcNow - pending.AtUtc < TimeSpan.FromSeconds(5)) return;
+        _pendingRename = null;
+        Journal?.Append(ChangeJournal.Actions.Modify, $"Renamed {pending.From} to {pending.To}" + DaySuffix);
+    }
+
+    private string DaySuffix => IsHistoryMode ? $" (on {ViewingDate:ddd d MMM yyyy})" : string.Empty;
+
+    private string RowLabel(string key)
+    {
+        var entry = RowTimeEdit.RowEntries(_settings.Entries, ViewingDate, key).FirstOrDefault();
+        return entry is null ? key : ChangeJournal.Describe(entry.TaskName, entry.JobCodeText, entry.Ticket);
+    }
 
     /// <summary>
     /// X for the catch-up prompt. Same floor the scheduler uses; not a second interval.
@@ -149,6 +187,7 @@ public sealed class AppState : INotifyPropertyChanged
     /// </summary>
     public void Tick()
     {
+        FlushRename(force: false);
         if (ActiveSession is null)
         {
             var idle = NoTaskStartedUtc is DateTime started ? DateTime.UtcNow - started : TimeSpan.Zero;
@@ -237,6 +276,7 @@ public sealed class AppState : INotifyPropertyChanged
 
         RefreshToday();
         Persist();
+        Log(ChangeJournal.Actions.Start, "Started " + ChangeJournal.Describe(name, codeText, ticketText), entry.Id);
         Tick();
         StatusText = $"Tracking: {ActiveTaskLabel}";
     }
@@ -252,6 +292,7 @@ public sealed class AppState : INotifyPropertyChanged
     /// </summary>
     public void StopAllForShutdown()
     {
+        FlushRename(force: true);
         var now = DateTime.UtcNow;
         StopActive(save: false, startNoTask: false, now);
         EndNoTask(now);
@@ -265,6 +306,10 @@ public sealed class AppState : INotifyPropertyChanged
         var entry = _settings.Entries.FirstOrDefault(e => e.Id == ActiveSession.EntryId);
         if (entry is not null && entry.EndUtc is null)
             entry.EndUtc = nowUtc;
+        Log(ChangeJournal.Actions.Stop,
+            $"Stopped {ChangeJournal.Describe(ActiveSession.TaskName, ActiveSession.JobCodeText, ActiveSession.Ticket)} after " +
+            ChangeJournal.FormatDuration(nowUtc - ActiveSession.StartedUtc),
+            ActiveSession.EntryId);
 
         if (startNoTask)
             _settings.NoTaskStartedUtc ??= nowUtc;
@@ -327,11 +372,15 @@ public sealed class AppState : INotifyPropertyChanged
             return error;
         }
 
-        _settings.Entries.AddRange(NoTaskTime.Place(slices, open));
+        var placed = NoTaskTime.Place(slices, open).ToList();
+        _settings.Entries.AddRange(placed);
         _settings.UnassignedSegments = NoTaskTime.Remaining(_settings.UnassignedSegments, _settings.Entries, now);
         Tick();
         RefreshToday();
         Persist();
+        foreach (var e in placed)
+            Log(ChangeJournal.Actions.Add,
+                $"No Task Selected time assigned: {ChangeJournal.Describe(e.TaskName, e.JobCodeText, e.Ticket)} {ChangeJournal.FormatDuration(e.Duration)}", e.Id);
         return null;
     }
 
@@ -372,6 +421,8 @@ public sealed class AppState : INotifyPropertyChanged
             }
 
             _settings.Entries.Add(row);
+            Log(ChangeJournal.Actions.Add,
+                $"Catch-up: {ChangeJournal.Describe(row.TaskName, row.JobCodeText, row.Ticket)} {ChangeJournal.FormatDuration(row.Duration)}", row.Id);
         }
 
         RefreshToday();
@@ -417,6 +468,8 @@ public sealed class AppState : INotifyPropertyChanged
         _settings.Entries.Add(entry);
         RefreshToday();
         Persist();
+        Log(ChangeJournal.Actions.Add,
+            $"Manual entry: {ChangeJournal.Describe(entry.TaskName, entry.JobCodeText, entry.Ticket)} {ChangeJournal.FormatDuration(entry.Duration)}", entry.Id);
     }
 
     /// <summary>
@@ -438,7 +491,7 @@ public sealed class AppState : INotifyPropertyChanged
         if (totalMinutes < 1) totalMinutes = 1;
 
         var name = string.IsNullOrWhiteSpace(taskName) ? "Untitled task" : taskName.Trim();
-        _settings.Entries.Add(new TimeEntry
+        var added = new TimeEntry
         {
             StartUtc = startUtc,
             EndUtc = endUtc,
@@ -450,9 +503,12 @@ public sealed class AppState : INotifyPropertyChanged
             Notes = "Added time",
             ManualMinutes = totalMinutes,
             Source = "add-time"
-        });
+        };
+        _settings.Entries.Add(added);
         RefreshToday();
         Persist();
+        Log(ChangeJournal.Actions.Add,
+            $"Added {ChangeJournal.FormatDuration(duration)} to {ChangeJournal.Describe(name, added.JobCodeText, added.Ticket)}", added.Id);
     }
 
     /// <summary>Finished time on a task-type row of <see cref="ViewingDate"/> that Remove may take.</summary>
@@ -467,12 +523,14 @@ public sealed class AppState : INotifyPropertyChanged
     /// </summary>
     public string? RemoveTimeFromTaskType(string key, TimeSpan amount)
     {
+        var label = RowLabel(key);
         var result = RowTimeEdit.Remove(_settings.Entries, ViewingDate, key, ActiveSession?.EntryId, amount);
         if (!result.Applied)
             return result.Error ?? "Could not remove that time.";
 
         RefreshToday();
         Persist();
+        Log(ChangeJournal.Actions.Modify, $"Removed {ChangeJournal.FormatDuration(amount)} from {label}");
         return null;
     }
 
@@ -483,6 +541,7 @@ public sealed class AppState : INotifyPropertyChanged
     /// </summary>
     public string? MoveTaskTypeToJobCode(string key, Guid? targetId, string targetText, out string? error)
     {
+        var label = RowLabel(key);
         var result = RowTimeEdit.Move(_settings.Entries, ActiveSession, ViewingDate, key, targetId, targetText);
         if (!result.Applied)
         {
@@ -499,6 +558,8 @@ public sealed class AppState : INotifyPropertyChanged
         error = null;
         RefreshToday();
         Persist();
+        Log(ChangeJournal.Actions.Move,
+            $"Moved {label} to {(string.IsNullOrWhiteSpace(targetText) ? "No job code" : targetText.Trim())}");
         return result.NewKey;
     }
 
@@ -537,6 +598,7 @@ public sealed class AppState : INotifyPropertyChanged
     public void SoftDeleteTaskType(string key)
     {
         if (string.IsNullOrWhiteSpace(key)) return;
+        var label = RowLabel(key);
 
         if (ActiveSession is not null && TaskTypeSummary.KeyOf(ActiveSession) == key)
         {
@@ -563,6 +625,7 @@ public sealed class AppState : INotifyPropertyChanged
         PurgeExpiredDeletedEntries(persist: false);
         RefreshToday();
         Persist();
+        Log(ChangeJournal.Actions.Delete, "Deleted " + label);
     }
 
     /// <summary>
@@ -574,6 +637,7 @@ public sealed class AppState : INotifyPropertyChanged
         string sourceKey,
         IReadOnlyList<TaskTypeReassign.Assignment> assignments)
     {
+        var label = RowLabel(sourceKey);
         var result = TaskTypeReassign.Apply(
             _settings.Entries,
             ActiveSession,
@@ -595,6 +659,7 @@ public sealed class AppState : INotifyPropertyChanged
 
         RefreshToday();
         Persist();
+        Log(ChangeJournal.Actions.Move, $"Assigned the time of {label} to other tasks and deleted it");
         return null;
     }
 
@@ -637,7 +702,7 @@ public sealed class AppState : INotifyPropertyChanged
         var keySet = keys.ToHashSet(StringComparer.Ordinal);
         if (keySet.Count == 0) return;
 
-        var changed = false;
+        var restored = new List<TimeEntry>();
         foreach (var entry in _settings.Entries)
         {
             if (!entry.IsDeleted || entry.DeletedAtLocal is null) continue;
@@ -646,12 +711,17 @@ public sealed class AppState : INotifyPropertyChanged
 
             entry.IsDeleted = false;
             entry.DeletedAtLocal = null;
-            changed = true;
+            restored.Add(entry);
         }
 
-        if (!changed) return;
+        if (restored.Count == 0) return;
         RefreshToday();
         Persist();
+        foreach (var group in restored.GroupBy(TaskTypeSummary.KeyOf))
+        {
+            var first = group.First();
+            Log(ChangeJournal.Actions.Restore, "Restored " + ChangeJournal.Describe(first.TaskName, first.JobCodeText, first.Ticket));
+        }
     }
 
     public void RestoreAllDeletedToday() =>
@@ -739,6 +809,7 @@ public sealed class AppState : INotifyPropertyChanged
         {
             RefreshToday();
             Persist();
+            Log(ChangeJournal.Actions.Modify, "Screen-lock time assigned");
         }
 
         return true;
@@ -751,6 +822,7 @@ public sealed class AppState : INotifyPropertyChanged
     public string? ChangeTaskTypeJobCodeOnViewingDay(string key, JobCode newCode)
     {
         if (string.IsNullOrWhiteSpace(key) || newCode is null) return null;
+        var label = RowLabel(key);
 
         var changed = false;
         string? newKey = null;
@@ -787,6 +859,7 @@ public sealed class AppState : INotifyPropertyChanged
 
         RefreshToday();
         Persist();
+        Log(ChangeJournal.Actions.Move, $"Moved {label} to {newCode.Display}");
         return newKey;
     }
 
@@ -801,6 +874,7 @@ public sealed class AppState : INotifyPropertyChanged
         var name = newTaskName.Trim();
         if (name.Length == 0) return null;
         var category = string.IsNullOrWhiteSpace(newCategory) ? "General" : newCategory.Trim();
+        var label = RowLabel(key);
 
         var changed = false;
         string? newKey = null;
@@ -837,6 +911,7 @@ public sealed class AppState : INotifyPropertyChanged
 
         RefreshToday();
         Persist();
+        NoteRename(key, label, newKey!, $"{name} / {category}");
         return newKey;
     }
 
@@ -1024,6 +1099,62 @@ public sealed class AppState : INotifyPropertyChanged
     {
         PurgeExpiredDeletedEntries(persist: false);
         _store.Save(_settings);
+    }
+
+    /// <summary>
+    /// Merges an older copy into the data in use (Import data…): see <see cref="SettingsMerge.Import"/>.
+    /// Saves and refreshes the lists.
+    /// </summary>
+    public SettingsMerge.Report ImportSettings(AppSettings incoming, string from)
+    {
+        var report = SettingsMerge.Import(_settings, SettingsStore.Clone(incoming), DateTime.UtcNow);
+        ReloadFromSettings();
+        Persist();
+        Log(ChangeJournal.Actions.Import,
+            $"Imported {report.EntriesAdded} entries, {report.JobCodesAdded.Count} job codes, {report.CategoriesAdded.Count} categories from {from}");
+        return report;
+    }
+
+    /// <summary>Picks up changes another PC saved to settings.json, in memory only (see <see cref="SettingsStore.Pull"/>).</summary>
+    public SettingsMerge.Report? SyncFromDisk() => _store.Pull(_settings);
+
+    /// <summary>Keep selected (after Yes on the overlap prompt): adds the chosen items from the other PC and saves.</summary>
+    public IReadOnlyList<TimeEntry> KeepFromOtherPc(IReadOnlyList<OverlapMerge.Item> items, IReadOnlySet<Guid> selected,
+        string machine)
+    {
+        var added = OverlapMerge.Keep(_settings, items, selected);
+        var offered = items.Count(i => !i.AlreadyHere);
+        if (added.Count > 0)
+        {
+            RefreshToday();
+            Persist();
+        }
+
+        Log(ChangeJournal.Actions.Overlap, added.Count == 0
+            ? $"Discarded {offered} item(s) from {machine}"
+            : $"Kept {added.Count} of {offered} item(s) from {machine}: " +
+              string.Join("; ", added.Select(e => $"{ChangeJournal.Describe(e.TaskName, e.JobCodeText, e.Ticket)} {ChangeJournal.FormatDuration(e.Duration)}")));
+        foreach (var e in added)
+            Journal?.Append(ChangeJournal.Actions.Add, $"From {machine}: {ChangeJournal.Describe(e.TaskName, e.JobCodeText, e.Ticket)}", e.Id);
+        return added;
+    }
+
+    public void LogOverlap(string summary) => Journal?.Append(ChangeJournal.Actions.Overlap, summary);
+
+    public void LogFolderChange(string summary) => Journal?.Append(ChangeJournal.Actions.Folder, summary);
+
+    public void LogImport(string summary) => Journal?.Append(ChangeJournal.Actions.Import, summary);
+
+    private void ReloadFromSettings()
+    {
+        JobCodes.Clear();
+        foreach (var c in _settings.JobCodes) JobCodes.Add(c);
+        FavoriteTasks.Clear();
+        foreach (var f in _settings.FavoriteTasks) FavoriteTasks.Add(f);
+        Categories.Clear();
+        foreach (var c in _settings.Categories) Categories.Add(c);
+        RefreshToday();
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private (DateTime startUtc, DateTime endUtc) ResolveManualRange(TimeSpan duration)

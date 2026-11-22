@@ -89,6 +89,9 @@ public partial class SettingsWindow : Window
     private void UseDefaultFolder_Click(object sender, RoutedEventArgs e) =>
         ChangeDataFolder(DataFolder.DefaultFolder);
 
+    private void ImportData_Click(object sender, RoutedEventArgs e) =>
+        new ImportDataWindow { Owner = this }.ShowDialog();
+
     private void OpenDataFolder_Click(object sender, RoutedEventArgs e)
     {
         try
@@ -116,27 +119,27 @@ public partial class SettingsWindow : Window
                 break;
 
             case DataFolder.ChangeKind.CopyToEmpty:
-                if (MessageBox.Show(this,
-                        "Move your Timesheet Buddy data to:\n" + target +
-                        "\n\nYour settings, time entries, day notes and App Track usage are copied there now and used from now on. " +
-                        "The copy in\n" + current + "\nis left in place as a backup.",
-                        "Data folder",
-                        MessageBoxButton.OKCancel,
-                        MessageBoxImage.Question) != MessageBoxResult.OK)
-                    return;
-                CopyAndSwitch(current, target, backupNote: null);
-                break;
-
             case DataFolder.ChangeKind.TargetHasData:
+                var kind = DataFolder.Plan(current, target);
                 var now = DateTime.Now;
                 var backupName = DataFolder.BackupName(DataFolder.SettingsFileName, now);
-                var choice = new DataFolderChoiceWindow(target, backupName, App.State.ActiveSession is not null)
+                var choice = new DataFolderChoiceWindow(kind, current, target, backupName, App.State.ActiveSession is not null)
                     { Owner = this };
                 choice.ShowDialog();
-                if (choice.Choice == DataFolderChoiceWindow.Result.Replace)
-                    CopyAndSwitch(current, target, $"\n\nThe folder's previous settings.json was kept as {backupName}.", now);
-                else if (choice.Choice == DataFolderChoiceWindow.Result.UseExisting)
-                    UseExistingAndRestart(target);
+                switch (choice.Choice)
+                {
+                    case DataFolderChoiceWindow.Result.Copy:
+                    case DataFolderChoiceWindow.Result.Replace:
+                        CopyAndSwitch(current, target, choice.Move, now);
+                        break;
+                    case DataFolderChoiceWindow.Result.Merge:
+                        MergeAndSwitch(current, target, choice.Move, now);
+                        break;
+                    case DataFolderChoiceWindow.Result.UseExisting:
+                        UseExistingAndRestart(target);
+                        break;
+                }
+
                 break;
         }
     }
@@ -166,16 +169,23 @@ public partial class SettingsWindow : Window
             MessageBoxImage.Information);
     }
 
-    private void CopyAndSwitch(string current, string target, string? backupNote, DateTime? nowLocal = null)
+    /// <summary>
+    /// Copy (empty folder) or Replace: the files are copied and checked, the store switches and saves, the pointer
+    /// is written; any failure undoes the copies. With <paramref name="move"/> the old files are deleted afterwards.
+    /// </summary>
+    private void CopyAndSwitch(string current, string target, bool move, DateTime nowLocal)
     {
+        DataFolder.TransferResult result;
         try
         {
             App.State.Persist();
             App.AppTracker.Flush();
-            DataFolder.CopyData(current, target, nowLocal ?? DateTime.Now);
-            App.Store.SwitchFolder(target);
-            App.State.Persist();
-            DataFolder.WritePointer(DataFolder.DefaultFolder, target);
+            result = DataFolder.Transfer(current, target, move, nowLocal, commit: () =>
+            {
+                App.Store.SwitchFolder(target);
+                App.State.Persist();
+                DataFolder.WritePointer(DataFolder.DefaultFolder, target);
+            });
         }
         catch (Exception ex)
         {
@@ -186,14 +196,77 @@ public partial class SettingsWindow : Window
             return;
         }
 
-        App.ClearUnavailableDataFolder();
-        ShowDataFolder();
+        AfterSwitch(current, target, move ? "Moved" : "Copied");
+        var backup = result.BackedUp.FirstOrDefault(n => n.StartsWith(DataFolder.SettingsFileName, StringComparison.OrdinalIgnoreCase));
         MessageBox.Show(this,
             "Timesheet Buddy now saves to:\n" + App.Store.Folder +
-            "\n\nThe old copy was left in place in:\n" + current + backupNote,
+            OldCopyNote(current, move, result.Removed.Count, result.NotRemoved) +
+            (backup is null ? string.Empty : $"\n\nThe folder's previous settings.json was kept as {backup}."),
             "Data folder",
             MessageBoxButton.OK,
             MessageBoxImage.Information);
+    }
+
+    /// <summary>
+    /// Merge: the current data is added to the folder's data (checked by reading it back), then the store switches
+    /// and saves, which brings the folder's entries into the open timesheet. The running timer keeps running.
+    /// </summary>
+    private void MergeAndSwitch(string current, string target, bool move, DateTime nowLocal)
+    {
+        DataImport.FolderMergeResult merged;
+        try
+        {
+            App.State.Persist();
+            App.AppTracker.Flush();
+            merged = DataImport.MergeFolder(current, App.State.Settings, target, removeOriginals: false, nowLocal);
+            App.Store.SwitchFolder(target);
+            App.State.Persist();
+            DataFolder.WritePointer(DataFolder.DefaultFolder, target);
+        }
+        catch (Exception ex)
+        {
+            App.Store.SwitchFolder(current);
+            ShowError("Could not merge your data into:\n" + target +
+                      "\n\nTimesheet Buddy keeps using:\n" + current + "\n\n" + ex.Message);
+            ShowDataFolder();
+            return;
+        }
+
+        IReadOnlyList<string> removed = [];
+        IReadOnlyList<string> notRemoved = [];
+        if (move)
+            (removed, notRemoved) = DataFolder.RemoveFiles(current, DataFolder.DataFiles(current));
+
+        App.AppTracker.ReloadFromDisk();
+        AfterSwitch(current, target, "Merged");
+        var s = merged.Settings;
+        MessageBox.Show(this,
+            "Timesheet Buddy now saves to:\n" + App.Store.Folder +
+            $"\n\nAdded {s.EntriesAdded} of your entries and updated {s.EntriesUpdated}, " +
+            $"{merged.Files.NotesNew.Count + merged.Files.NotesAppended.Count} day notes and " +
+            $"{merged.Files.UsageNew.Count + merged.Files.UsageMerged.Count} App Track days." +
+            (merged.SettingsBackup is null ? string.Empty : $"\n\nThe folder's previous settings.json was kept as {merged.SettingsBackup}.") +
+            OldCopyNote(current, move, removed.Count, notRemoved),
+            "Data folder",
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
+    }
+
+    private void AfterSwitch(string current, string target, string verb)
+    {
+        App.ClearUnavailableDataFolder();
+        SessionFiles.Delete(current, App.Client.ClientId);
+        App.State.LogFolderChange($"{verb} data from {current} to {target}");
+        App.Presence?.Tick();
+        ShowDataFolder();
+    }
+
+    private static string OldCopyNote(string current, bool move, int removed, IReadOnlyList<string> notRemoved)
+    {
+        if (!move) return "\n\nThe old copy was left in place in:\n" + current;
+        if (notRemoved.Count == 0) return $"\n\n{removed} file(s) were removed from:\n" + current;
+        return $"\n\n{removed} file(s) were removed from {current}. These could not be removed and were left there: " +
+               string.Join(", ", notRemoved);
     }
 
     private void UseExistingAndRestart(string target)
