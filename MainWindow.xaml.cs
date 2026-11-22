@@ -1256,9 +1256,12 @@ public partial class MainWindow : Window
         _scheduler.RecheckOpen = true;
         try
         {
-            EnsureVisibleForPrompt();
-            var win = new RecheckWindow { Owner = this };
+            // Popup only — do not restore or activate the main window. "Yes, still on it"
+            // and Stop leave whatever you were doing in front; Switch task brings us up.
+            var win = new RecheckWindow();
             win.ShowDialog();
+            if (win.BringMainToFront)
+                EnsureVisibleForPrompt();
         }
         finally
         {

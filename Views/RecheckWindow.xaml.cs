@@ -30,6 +30,11 @@ public partial class RecheckWindow : Window
         };
     }
 
+    /// <summary>
+    /// True when the user chose Switch task and the main window should come forward.
+    /// </summary>
+    public bool BringMainToFront { get; private set; }
+
     private static int RoundToFive(int minutes)
     {
         var rounded = (int)Math.Round(minutes / 5.0) * 5;
@@ -63,9 +68,8 @@ public partial class RecheckWindow : Window
     private void Switch_Click(object sender, RoutedEventArgs e)
     {
         ApplyRecheckInterval();
+        BringMainToFront = true;
         DialogResult = true;
         Close();
-        if (Owner is MainWindow main)
-            main.Activate();
     }
 }

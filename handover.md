@@ -105,7 +105,7 @@ Requires [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) on Win
 | Menu → Add job code… | `Views/QuickAddJobCodeWindow` → `AppState.AddJobCode` |
 | Settings (codes, favorites, categories, intervals, Widget and Data tabs); Menu → Settings… | `Views/SettingsWindow` |
 | Data folder (Settings → Data: current path, Browse…, Open folder, Use default; copy / use existing / replace) | `SettingsWindow.ChangeDataFolder` → `Services/DataFolder` + `SettingsStore.SwitchFolder`; `Views/DataFolderChoiceWindow`; start-up in `App.OnStartup` |
-| Still-working recheck popup | `PromptScheduler` → `Views/RecheckWindow` (skipped in history) |
+| Still-working recheck popup (popup only; main window stays put unless Switch task) | `PromptScheduler` → `Views/RecheckWindow` (skipped in history) |
 | Catch-up prompt (only when minutes are unaccounted; Not now dismisses) | `PromptScheduler` → `UnaccountedTime` → `Views/FifteenMinuteWindow` or `RecheckWindow` |
 | Title bar (Pin, Menu, minimize, close) and Menu (App Track ✓, App usage…, Day log…, Weeks & export…, Job code view, Settings…, Add job code…, Restore deleted tasks…, Load timesheet…) | `MainWindow.xaml` + `MainWindow.Menu_Click` |
 | App Track (Menu → App Track check item, first in the Menu; Settings → Prompts & pin checkbox; off by default) | `App.SetAppTrack` → `AppState.SetAppTrackEnabled` (`appTrackEnabled`) + `Services/AppTracker` → `Services/ForegroundApp` (Win32) → `Services/AppUsage` (`AppNameCache`, `AppUsageAccumulator`, `AppUsageFiles`) |
