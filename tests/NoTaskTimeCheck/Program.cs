@@ -178,6 +178,104 @@ try
         "idle restarts from now after assigning");
     Check(NoTaskTime.WholeMinutes(NoTaskTime.Total(assign.OpenNoTaskTime())) == 5, "the unassigned rest of the closed run stays pending");
 
+    // Today-by-task No Task Selected row (pure): Move keeps the original clock times, never twice.
+    var rowDay = Utc(9, 30).ToLocalTime().Date;
+    var rowTarget = new NoTaskTime.MoveTarget("Review", "Development", null, "DEV");
+    var rowNow = Utc(9, 50, 30);
+    var rowSpans = NoTaskTime.ForDay(pending, Utc(9, 50), logged, rowDay, rowNow);
+    Check(NoTaskTime.Total(rowSpans) == TimeSpan.FromSeconds(18 * 60 + 30) && rowSpans.Count == 4,
+        "the row shows pending minus logged time plus the running run from its first second");
+    var moved = NoTaskTime.MoveDay(pending, Utc(9, 50), logged, rowDay, rowNow, rowTarget);
+    Check(moved.Applied && moved.Added.Count == 4 && moved.Amount == NoTaskTime.Total(rowSpans), "Move logs every open span");
+    Check(moved.Added.Select(a => (a.StartUtc, a.EndUtc!.Value)).SequenceEqual(rowSpans.Select(s => (s.StartUtc, s.EndUtc))),
+        "moved entries keep the spans' own start and end times");
+    Check(moved.Added.All(a => a.TaskName == "Review" && a.Category == "Development" && a.JobCodeText == "DEV" &&
+                               a.Source == NoTaskTime.AssignedSource && a.ManualMinutes == 0),
+        "moved entries carry the target task and are marked as assigned idle time");
+    Check(moved.Pending.Count == 0 && moved.RunningStartUtc == rowNow, "nothing stays pending and the running run restarts from now");
+    var afterMove = logged.Concat(moved.Added).ToList();
+    var reopen = NoTaskTime.Open(moved.Pending, moved.RunningStartUtc, afterMove, rowNow);
+    Check(NoTaskTime.Total(reopen) == TimeSpan.Zero && NoTaskTime.Validate([new CatchUpSlice { TaskName = "A", Minutes = 1 }], reopen) is not null,
+        "moved time is not offered to the interval prompt again");
+    var overlapAfterMove = false;
+    for (var i = 0; i < afterMove.Count; i++)
+        for (var j = i + 1; j < afterMove.Count; j++)
+            overlapAfterMove |= Overlaps(afterMove[i].StartUtc, afterMove[i].EndUtc!.Value, afterMove[j].StartUtc, afterMove[j].EndUtc!.Value);
+    Check(!overlapAfterMove, "moved entries do not overlap logged time");
+    Check(!NoTaskTime.MoveDay([], null, logged, rowDay, rowNow, rowTarget).Applied, "Move with no idle time on the day is refused");
+
+    var otherDay = rowDay.AddDays(-1);
+    var olderPending = new List<UnassignedSegment>
+    {
+        new() { StartUtc = Utc(9, 0).AddDays(-1), EndUtc = Utc(9, 30).AddDays(-1) },
+        new() { StartUtc = Utc(9, 0), EndUtc = Utc(9, 10) }
+    };
+    var movedOlder = NoTaskTime.MoveDay(olderPending, Utc(9, 50), [], otherDay, rowNow, rowTarget);
+    Check(movedOlder.Applied && movedOlder.Amount == TimeSpan.FromMinutes(30) && movedOlder.RunningStartUtc == Utc(9, 50),
+        "moving an older day leaves today's running run alone");
+    Check(movedOlder.Pending.Count == 1 && movedOlder.Pending[0].StartUtc == Utc(9, 0), "moving an older day keeps today's pending time");
+
+    var midnightLocal = DateTime.SpecifyKind(rowDay, DateTimeKind.Local).ToUniversalTime();
+    var acrossMidnight = new List<UnassignedSegment> { new() { StartUtc = midnightLocal.AddMinutes(-20), EndUtc = midnightLocal.AddMinutes(15) } };
+    var movedAcross = NoTaskTime.MoveDay(acrossMidnight, null, [], rowDay, midnightLocal.AddHours(2), rowTarget);
+    Check(movedAcross.Applied && movedAcross.Added.Single().StartUtc == midnightLocal && movedAcross.Amount == TimeSpan.FromMinutes(15),
+        "a span across midnight moves only the displayed day's part");
+    Check(movedAcross.Pending.Count == 1 && movedAcross.Pending[0].EndUtc == midnightLocal, "the previous day's part stays pending");
+
+    // Discard (pure): newest first, refused when over, nothing logged.
+    var discarded = NoTaskTime.DiscardFromDay(pending, null, logged, rowDay, Utc(10, 0), TimeSpan.FromMinutes(5));
+    Check(discarded.Applied && discarded.Added.Count == 0, "discard logs nothing");
+    var leftAfterDiscard = NoTaskTime.Open(discarded.Pending, null, logged, Utc(10, 0));
+    Check(NoTaskTime.Total(leftAfterDiscard) == TimeSpan.FromMinutes(13) && leftAfterDiscard[^1].EndUtc == Utc(9, 23),
+        "discarding 5 minutes takes the newest open minutes");
+    Check(NoTaskTime.DiscardFromDay(pending, null, logged, rowDay, Utc(10, 0), null).Pending.Count == 0, "discard all clears the day");
+    var overDiscard = NoTaskTime.DiscardFromDay(pending, null, logged, rowDay, Utc(10, 0), TimeSpan.FromMinutes(19));
+    Check(!overDiscard.Applied && overDiscard.Error is not null, "discarding more than the day holds is refused");
+    var discardRunning = NoTaskTime.DiscardFromDay([], Utc(9, 55), [], rowDay, Utc(10, 0), TimeSpan.FromMinutes(2));
+    Check(discardRunning.Applied && discardRunning.RunningStartUtc == Utc(10, 0) &&
+          discardRunning.Pending.Count == 1 && discardRunning.Pending[0].EndUtc == Utc(9, 58),
+        "discarding part of a running run keeps its earlier part pending and restarts it from now");
+
+    // AppState: Move and Discard on the row keep the band, the prompt and the store in step.
+    var rowState = NewState();
+    rowState.Settings.Entries.Clear();
+    rowState.Settings.UnassignedSegments.Clear();
+    rowState.StartOrSwitch("Email", "Admin", null, "ADMIN");
+    rowState.StopActive(save: true);
+    rowState.Settings.Entries.Clear();
+    var rowStateNow = DateTime.UtcNow;
+    rowState.Settings.UnassignedSegments.Add(new UnassignedSegment { StartUtc = rowStateNow.AddMinutes(-20), EndUtc = rowStateNow.AddMinutes(-10) });
+    rowState.Settings.NoTaskStartedUtc = rowStateNow.AddMinutes(-5);
+    var shown = NoTaskTime.Total(rowState.NoTaskSpansForViewingDay());
+    Check(Math.Abs(shown.TotalMinutes - 15) < 0.1, "the row total is pending plus running idle");
+    Check(rowState.MoveNoTaskTime(rowTarget) is null, "Move on the row is saved");
+    Check(rowState.NoTaskTotalForDay(DateTime.Today, DateTime.UtcNow) < TimeSpan.FromSeconds(3), "the band's No Task Selected total drops to zero");
+    Check(!NoTaskTime.ShouldPrompt(rowState.OpenNoTaskTime()) &&
+          rowState.AssignNoTaskTime([new CatchUpSlice { TaskName = "A", Minutes = 1 }]) is not null,
+        "the interval prompt cannot assign moved time again");
+    Check(rowState.IsNoTaskRunning && DateTime.UtcNow - rowState.NoTaskStartedUtc!.Value < TimeSpan.FromSeconds(5),
+        "No Task Selected keeps running from now");
+    var reviewRow = TaskTypeSummary.Build(rowState.Settings.Entries, DateTime.Today, DateTime.UtcNow).Single();
+    Check(reviewRow.TaskName == "Review" && reviewRow.SegmentCount == 2 && Math.Abs(reviewRow.Total.TotalMinutes - 15) < 0.1,
+        "the moved time shows as a Today-by-task row with one segment per span");
+    Check(Math.Abs(DayTotals.ForDay(rowState.Settings.Entries, DateTime.UtcNow).TotalMinutes - 15) < 0.1, "moved time counts in Total");
+    var rowReloaded = NewState();
+    Check(rowReloaded.Settings.UnassignedSegments.Count == 0 && rowReloaded.Settings.Entries.Count(e => e.TaskName == "Review") == 2,
+        "the move survives a reload");
+
+    var discardState = NewState();
+    discardState.Settings.Entries.Clear();
+    discardState.Settings.UnassignedSegments.Clear();
+    discardState.Settings.UnassignedSegments.Add(new UnassignedSegment { StartUtc = DateTime.UtcNow.AddMinutes(-25), EndUtc = DateTime.UtcNow.AddMinutes(-5) });
+    Check(discardState.AssignNoTaskTime([new CatchUpSlice { TaskName = "B", Minutes = 10 }]) is null, "the prompt assigns part first");
+    var entriesBefore = discardState.Settings.Entries.Count;
+    Check(discardState.DiscardNoTaskTime(TimeSpan.FromHours(2)) is not null, "discarding more than the row holds changes nothing");
+    Check(discardState.DiscardNoTaskTime(TimeSpan.FromMinutes(4)) is null &&
+          Math.Abs(NoTaskTime.Total(discardState.OpenNoTaskTime()).TotalMinutes - 6) < 0.1,
+        "discard takes only the prompt's leftover, newest first");
+    Check(discardState.DiscardNoTaskTime(null) is null && discardState.Settings.UnassignedSegments.Count == 0 &&
+          discardState.Settings.Entries.Count == entriesBefore, "discard all clears pending and logs nothing");
+
     // Add with a ticket: ends idle, stores the ticket on the entry and session, labels show it.
     var ticketed = NewState();
     ticketed.StartOrSwitch("Email", "Admin", null, "ADMIN");

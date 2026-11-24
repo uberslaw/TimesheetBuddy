@@ -233,10 +233,12 @@ public partial class MainWindow : Window
         var rows = DayTotals.ByJobCodeForDay(_state.Settings.Entries, day, now);
 
         // Shown beside the code rows but never added to Total or Time Remaining.
-        var noTask = _state.NoTaskTotalForDay(day, now);
+        var noTaskSpans = _state.NoTaskSpansForViewingDay(now);
+        var noTask = NoTaskTime.Total(noTaskSpans);
         var showNoTask = noTask > TimeSpan.Zero || (!_state.IsHistoryMode && _state.IsNoTaskRunning);
         NoTaskRow.Visibility = showNoTask ? Visibility.Visible : Visibility.Collapsed;
         NoTaskTotalText.Text = DayTotals.FormatCompact(noTask);
+        UpdateNoTaskListRow(noTask, noTaskSpans.Count);
 
         _dayCodeRows.Clear();
         var grand = TimeSpan.Zero;
@@ -307,11 +309,144 @@ public partial class MainWindow : Window
         }
 
         ApplyTaskTotals(summary);
-        var empty = _taskRows.Count == 0;
-        TaskEmptyText.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
-        TaskHeader.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
         RefreshDayCodeTotals();
     }
+
+    /// <summary>The No Task Selected row pinned under Today by task; only while the day has some.</summary>
+    private void UpdateNoTaskListRow(TimeSpan total, int spans)
+    {
+        var show = total > TimeSpan.Zero;
+        NoTaskListRow.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        NoTaskListTotalText.Text = DayTotals.FormatCompact(total);
+        NoTaskListSpansText.Text = spans.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        var empty = _taskRows.Count == 0 && !show;
+        TaskEmptyText.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
+        TaskHeader.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void NoTaskListRow_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        NoTaskSplitItem.IsEnabled = !_state.IsHistoryMode && NoTaskTime.ShouldPrompt(_state.OpenNoTaskTime());
+    }
+
+    private void NoTaskMoveMenu_Click(object sender, RoutedEventArgs e)
+    {
+        var spans = _state.NoTaskSpansForViewingDay();
+        var total = NoTaskTime.Total(spans);
+        if (total <= TimeSpan.Zero)
+        {
+            MessageBox.Show(this, $"There is no {NoTaskTime.Label} time on this day to move.", "Move time",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var summary = TaskTypeSummary.Build(_state.Settings.Entries, _state.ViewingDate, DateTime.UtcNow);
+        var dialog = new MoveTimeWindow(total, spans.Count, NoTaskMoveTargets(summary), _state.Categories.ToList())
+        { Owner = this };
+        if (!ShowHoldingCatchUp(dialog) || dialog.SelectedTarget is not { TaskName: { } task } target)
+            return;
+
+        var error = _state.MoveNoTaskTime(new NoTaskTime.MoveTarget(
+            task, target.Category ?? "General", target.JobCodeId, target.JobCodeText, target.Ticket));
+        if (error is not null)
+        {
+            MessageBox.Show(this, error, "Move time", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        QueueTaskRebuild();
+        RefreshDayCodeTotals();
+        BindStatus();
+        StatusText.Text = $"Moved {DayTotals.FormatCompact(total)} of {NoTaskTime.Label} to {TicketRules.Label(target.Ticket, task)}";
+    }
+
+    private void NoTaskDiscardMenu_Click(object sender, RoutedEventArgs e)
+    {
+        var total = NoTaskTime.Total(_state.NoTaskSpansForViewingDay());
+        if (total <= TimeSpan.Zero) return;
+
+        var dialog = ModifyTimeWindow.ForNoTaskDiscard(total);
+        dialog.Owner = this;
+        if (!ShowHoldingCatchUp(dialog))
+            return;
+
+        var error = _state.DiscardNoTaskTime(dialog.IsRemoveAll ? null : dialog.SelectedDuration);
+        if (error is not null)
+        {
+            MessageBox.Show(this, error, "Discard time", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        RefreshDayCodeTotals();
+        BindStatus();
+        StatusText.Text = dialog.IsRemoveAll
+            ? $"Discarded {NoTaskTime.Label} time"
+            : $"Discarded {FormatShortDuration(dialog.SelectedDuration)} of {NoTaskTime.Label} time";
+    }
+
+    private void NoTaskSplitMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (_state.IsHistoryMode || _scheduler.FifteenOpen || _scheduler.RecheckOpen) return;
+        var open = _state.OpenNoTaskTime();
+        if (NoTaskTime.ShouldPrompt(open))
+            ShowAssignNoTask(open);
+    }
+
+    /// <summary>Shows a dialog with the catch-up prompt held off, so it cannot open over it and assign the same time.</summary>
+    private bool ShowHoldingCatchUp(Window dialog)
+    {
+        var held = !_scheduler.FifteenOpen;
+        if (held) _scheduler.FifteenOpen = true;
+        try
+        {
+            return dialog.ShowDialog() == true;
+        }
+        finally
+        {
+            if (held) _scheduler.FifteenOpen = false;
+        }
+    }
+
+    /// <summary>
+    /// Targets for the No Task Selected row: the day's task rows first (time joins that row), Break, then
+    /// every active job code (a task name and category are asked for).
+    /// </summary>
+    private List<MoveTarget> NoTaskMoveTargets(IReadOnlyList<TaskTypeRow> summary)
+    {
+        var targets = new List<MoveTarget>();
+        foreach (var row in summary)
+        {
+            var code = JobCode.FormatLabelFromStored(row.JobCodeText);
+            var display = $"{TicketRules.Label(row.Ticket, row.TaskName)} · {row.Category} · {(code == "—" ? "No job code" : code)}";
+            targets.Add(new MoveTarget(row.JobCodeId, row.JobCodeText, display)
+            {
+                TaskName = row.TaskName,
+                Category = row.Category,
+                Ticket = row.Ticket
+            });
+        }
+
+        if (!summary.Any(r => IsBreak(r.TaskName, r.Category)))
+            targets.Add(new MoveTarget(null, string.Empty, $"{LockIntervalSplit.BreakTaskName} · {LockIntervalSplit.BreakCategory} · No job code")
+            {
+                TaskName = LockIntervalSplit.BreakTaskName,
+                Category = LockIntervalSplit.BreakCategory
+            });
+
+        targets.AddRange(_state.JobCodes
+            .Where(c => c.IsActive)
+            .OrderBy(c => c.Code, StringComparer.OrdinalIgnoreCase)
+            .Select(c => new MoveTarget(c.Id, c.Display, $"{c.Display} (new task)")
+            {
+                SuggestedTaskName = string.IsNullOrWhiteSpace(c.Description) ? c.Code : c.Description
+            }));
+        return targets;
+    }
+
+    private static bool IsBreak(string? task, string? category) =>
+        string.Equals(task?.Trim(), LockIntervalSplit.BreakTaskName, StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(category?.Trim(), LockIntervalSplit.BreakCategory, StringComparison.OrdinalIgnoreCase);
 
     private void RefreshTaskTotals()
     {

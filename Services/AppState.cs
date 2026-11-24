@@ -384,6 +384,58 @@ public sealed class AppState : INotifyPropertyChanged
         return null;
     }
 
+    /// <summary>The open No Task Selected spans the Today-by-task row shows for <see cref="ViewingDate"/>.</summary>
+    public IReadOnlyList<UtcInterval> NoTaskSpansForViewingDay(DateTime? nowUtc = null) =>
+        NoTaskTime.ForDay(_settings.UnassignedSegments, NoTaskStartedUtc, _settings.Entries, ViewingDate,
+            nowUtc ?? DateTime.UtcNow);
+
+    /// <summary>
+    /// Move Time… on the No Task Selected row: the viewing day's open idle time becomes entries for the
+    /// target at their own clock times and leaves pending. Returns null on success, otherwise why nothing changed.
+    /// </summary>
+    public string? MoveNoTaskTime(NoTaskTime.MoveTarget target)
+    {
+        var result = NoTaskTime.MoveDay(_settings.UnassignedSegments, NoTaskStartedUtc, _settings.Entries,
+            ViewingDate, DateTime.UtcNow, target);
+        if (!result.Applied)
+            return result.Error ?? "Could not move that time.";
+
+        _settings.Entries.AddRange(result.Added);
+        ApplyNoTaskResult(result);
+        var to = ChangeJournal.Describe(target.TaskName, target.JobCodeText, target.Ticket);
+        Log(ChangeJournal.Actions.Move, $"Moved {ChangeJournal.FormatDuration(result.Amount)} of {NoTaskTime.Label} time to {to}");
+        foreach (var e in result.Added)
+            Journal?.Append(ChangeJournal.Actions.Add,
+                $"{NoTaskTime.Label} time moved: {to} {ChangeJournal.FormatDuration(e.Duration)}" + DaySuffix, e.Id);
+        return null;
+    }
+
+    /// <summary>
+    /// Discards the viewing day's open No Task Selected time, newest first (null = all of it). Nothing is
+    /// logged as work. Returns null on success, otherwise why nothing changed.
+    /// </summary>
+    public string? DiscardNoTaskTime(TimeSpan? amount)
+    {
+        var result = NoTaskTime.DiscardFromDay(_settings.UnassignedSegments, NoTaskStartedUtc, _settings.Entries,
+            ViewingDate, DateTime.UtcNow, amount);
+        if (!result.Applied)
+            return result.Error ?? "Could not discard that time.";
+
+        ApplyNoTaskResult(result);
+        Log(ChangeJournal.Actions.Delete, $"Discarded {ChangeJournal.FormatDuration(result.Amount)} of {NoTaskTime.Label} time");
+        return null;
+    }
+
+    private void ApplyNoTaskResult(NoTaskTime.DayEditResult result)
+    {
+        _settings.UnassignedSegments = result.Pending;
+        if (ActiveSession is null)
+            _settings.NoTaskStartedUtc = result.RunningStartUtc;
+        Tick();
+        RefreshToday();
+        Persist();
+    }
+
     private string NotTrackingStatus()
     {
         if (IsHistoryMode) return ViewingDateLabel;

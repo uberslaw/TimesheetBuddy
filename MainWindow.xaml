@@ -332,6 +332,7 @@
                     <ScrollViewer x:Name="TaskScroll" VerticalScrollBarVisibility="Auto"
                                   HorizontalScrollBarVisibility="Disabled"
                                   ScrollChanged="TaskScroll_ScrollChanged">
+                        <StackPanel>
                         <ItemsControl x:Name="TaskRowsList">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -435,6 +436,49 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+                        <Border x:Name="NoTaskListRow" Margin="0,0,0,3" CornerRadius="4" Padding="8,4"
+                                Background="Transparent" BorderBrush="{StaticResource LineBrush}"
+                                BorderThickness="1" Visibility="Collapsed"
+                                ContextMenuOpening="NoTaskListRow_ContextMenuOpening"
+                                ToolTip="Time with no task running since you pressed Stop. Not counted in Total. Right-click to move it to a task or discard it.">
+                            <Border.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="Move Time…" Click="NoTaskMoveMenu_Click"
+                                              ToolTip="Log this time on a task or job code at its original clock times"/>
+                                    <MenuItem x:Name="NoTaskSplitItem" Header="Split across tasks…" Click="NoTaskSplitMenu_Click"
+                                              ToolTip="Open the No Task Selected assignment dialog now"/>
+                                    <Separator/>
+                                    <MenuItem Header="Discard time…" Click="NoTaskDiscardMenu_Click"
+                                              ToolTip="Remove some or all of this time without logging it anywhere"/>
+                                </ContextMenu>
+                            </Border.ContextMenu>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="22"/>
+                                    <ColumnDefinition Width="2*"/>
+                                    <ColumnDefinition Width="1.2*"/>
+                                    <ColumnDefinition Width="1.4*"/>
+                                    <ColumnDefinition Width="62"/>
+                                    <ColumnDefinition Width="28"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="1" Text="No Task Selected" FontStyle="Italic"
+                                           Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" Margin="0,0,6,0"/>
+                                <TextBlock Grid.Column="2" Text="—" FontStyle="Italic" FontSize="11"
+                                           Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="3" Text="unassigned" FontStyle="Italic" FontSize="11"
+                                           Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="4" x:Name="NoTaskListTotalText" FontStyle="Italic"
+                                           FontFamily="Consolas, Cascadia Mono, Courier New"
+                                           Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Text="0"/>
+                                <TextBlock Grid.Column="5" x:Name="NoTaskListSpansText" FontStyle="Italic"
+                                           FontFamily="Consolas, Cascadia Mono, Courier New"
+                                           Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Text="0"/>
+                            </Grid>
+                        </Border>
+                        </StackPanel>
                     </ScrollViewer>
                     <TextBlock x:Name="TaskEmptyText" HorizontalAlignment="Center" VerticalAlignment="Top"
                                Margin="0,10,0,0" Foreground="{StaticResource MutedBrush}" FontSize="11"
