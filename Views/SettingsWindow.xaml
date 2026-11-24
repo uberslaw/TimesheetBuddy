@@ -80,7 +80,9 @@
 
             <TabItem Header="Prompts &amp; pin">
                 <StackPanel Margin="10">
-                    <CheckBox x:Name="AlwaysOnTopCheck" Content="Pin window always on top" Margin="0,0,0,12"/>
+                    <CheckBox x:Name="AlwaysOnTopCheck" Content="Pin window always on top" Margin="0,0,0,6"/>
+                    <CheckBox x:Name="AskBeforeExitCheck" Content="Ask before exiting" Margin="0,0,0,12"
+                              ToolTip="Confirm before the ✕ button, Alt+F4 or the taskbar closes Timesheet Buddy. Windows shutdown never asks."/>
 
                     <TextBlock FontWeight="SemiBold" Text="Still-working recheck" Margin="0,0,0,6"/>
                     <CheckBox x:Name="RecheckEnabledCheck" Content="Ask me if I'm still on the active task" Margin="0,0,0,8"/>

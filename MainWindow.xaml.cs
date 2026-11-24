@@ -35,6 +35,8 @@ public partial class MainWindow : Window
     private string? _lastTicketPrefix;
     private bool _positionDirty;
     private bool _closing;
+    private string? _closeSource;
+    private DateTime? _sessionEndQueriedUtc;
 
     public MainWindow()
     {
@@ -233,10 +235,12 @@ public partial class MainWindow : Window
         var rows = DayTotals.ByJobCodeForDay(_state.Settings.Entries, day, now);
 
         // Shown beside the code rows but never added to Total or Time Remaining.
-        var noTask = _state.NoTaskTotalForDay(day, now);
+        var noTaskSpans = _state.NoTaskSpansForViewingDay(now);
+        var noTask = NoTaskTime.Total(noTaskSpans);
         var showNoTask = noTask > TimeSpan.Zero || (!_state.IsHistoryMode && _state.IsNoTaskRunning);
         NoTaskRow.Visibility = showNoTask ? Visibility.Visible : Visibility.Collapsed;
         NoTaskTotalText.Text = DayTotals.FormatCompact(noTask);
+        UpdateNoTaskListRow(noTask, noTaskSpans.Count);
 
         _dayCodeRows.Clear();
         var grand = TimeSpan.Zero;
@@ -307,11 +311,144 @@ public partial class MainWindow : Window
         }
 
         ApplyTaskTotals(summary);
-        var empty = _taskRows.Count == 0;
-        TaskEmptyText.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
-        TaskHeader.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
         RefreshDayCodeTotals();
     }
+
+    /// <summary>The No Task Selected row pinned under Today by task; only while the day has some.</summary>
+    private void UpdateNoTaskListRow(TimeSpan total, int spans)
+    {
+        var show = total > TimeSpan.Zero;
+        NoTaskListRow.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        NoTaskListTotalText.Text = DayTotals.FormatCompact(total);
+        NoTaskListSpansText.Text = spans.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        var empty = _taskRows.Count == 0 && !show;
+        TaskEmptyText.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
+        TaskHeader.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void NoTaskListRow_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        NoTaskSplitItem.IsEnabled = !_state.IsHistoryMode && NoTaskTime.ShouldPrompt(_state.OpenNoTaskTime());
+    }
+
+    private void NoTaskMoveMenu_Click(object sender, RoutedEventArgs e)
+    {
+        var spans = _state.NoTaskSpansForViewingDay();
+        var total = NoTaskTime.Total(spans);
+        if (total <= TimeSpan.Zero)
+        {
+            MessageBox.Show(this, $"There is no {NoTaskTime.Label} time on this day to move.", "Move time",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var summary = TaskTypeSummary.Build(_state.Settings.Entries, _state.ViewingDate, DateTime.UtcNow);
+        var dialog = new MoveTimeWindow(total, spans.Count, NoTaskMoveTargets(summary), _state.Categories.ToList())
+        { Owner = this };
+        if (!ShowHoldingCatchUp(dialog) || dialog.SelectedTarget is not { TaskName: { } task } target)
+            return;
+
+        var error = _state.MoveNoTaskTime(new NoTaskTime.MoveTarget(
+            task, target.Category ?? "General", target.JobCodeId, target.JobCodeText, target.Ticket));
+        if (error is not null)
+        {
+            MessageBox.Show(this, error, "Move time", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        QueueTaskRebuild();
+        RefreshDayCodeTotals();
+        BindStatus();
+        StatusText.Text = $"Moved {DayTotals.FormatCompact(total)} of {NoTaskTime.Label} to {TicketRules.Label(target.Ticket, task)}";
+    }
+
+    private void NoTaskDiscardMenu_Click(object sender, RoutedEventArgs e)
+    {
+        var total = NoTaskTime.Total(_state.NoTaskSpansForViewingDay());
+        if (total <= TimeSpan.Zero) return;
+
+        var dialog = ModifyTimeWindow.ForNoTaskDiscard(total);
+        dialog.Owner = this;
+        if (!ShowHoldingCatchUp(dialog))
+            return;
+
+        var error = _state.DiscardNoTaskTime(dialog.IsRemoveAll ? null : dialog.SelectedDuration);
+        if (error is not null)
+        {
+            MessageBox.Show(this, error, "Discard time", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        RefreshDayCodeTotals();
+        BindStatus();
+        StatusText.Text = dialog.IsRemoveAll
+            ? $"Discarded {NoTaskTime.Label} time"
+            : $"Discarded {FormatShortDuration(dialog.SelectedDuration)} of {NoTaskTime.Label} time";
+    }
+
+    private void NoTaskSplitMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (_state.IsHistoryMode || _scheduler.FifteenOpen || _scheduler.RecheckOpen) return;
+        var open = _state.OpenNoTaskTime();
+        if (NoTaskTime.ShouldPrompt(open))
+            ShowAssignNoTask(open);
+    }
+
+    /// <summary>Shows a dialog with the catch-up prompt held off, so it cannot open over it and assign the same time.</summary>
+    private bool ShowHoldingCatchUp(Window dialog)
+    {
+        var held = !_scheduler.FifteenOpen;
+        if (held) _scheduler.FifteenOpen = true;
+        try
+        {
+            return dialog.ShowDialog() == true;
+        }
+        finally
+        {
+            if (held) _scheduler.FifteenOpen = false;
+        }
+    }
+
+    /// <summary>
+    /// Targets for the No Task Selected row: the day's task rows first (time joins that row), Break, then
+    /// every active job code (a task name and category are asked for).
+    /// </summary>
+    private List<MoveTarget> NoTaskMoveTargets(IReadOnlyList<TaskTypeRow> summary)
+    {
+        var targets = new List<MoveTarget>();
+        foreach (var row in summary)
+        {
+            var code = JobCode.FormatLabelFromStored(row.JobCodeText);
+            var display = $"{TicketRules.Label(row.Ticket, row.TaskName)} · {row.Category} · {(code == "—" ? "No job code" : code)}";
+            targets.Add(new MoveTarget(row.JobCodeId, row.JobCodeText, display)
+            {
+                TaskName = row.TaskName,
+                Category = row.Category,
+                Ticket = row.Ticket
+            });
+        }
+
+        if (!summary.Any(r => IsBreak(r.TaskName, r.Category)))
+            targets.Add(new MoveTarget(null, string.Empty, $"{LockIntervalSplit.BreakTaskName} · {LockIntervalSplit.BreakCategory} · No job code")
+            {
+                TaskName = LockIntervalSplit.BreakTaskName,
+                Category = LockIntervalSplit.BreakCategory
+            });
+
+        targets.AddRange(_state.JobCodes
+            .Where(c => c.IsActive)
+            .OrderBy(c => c.Code, StringComparer.OrdinalIgnoreCase)
+            .Select(c => new MoveTarget(c.Id, c.Display, $"{c.Display} (new task)")
+            {
+                SuggestedTaskName = string.IsNullOrWhiteSpace(c.Description) ? c.Code : c.Description
+            }));
+        return targets;
+    }
+
+    private static bool IsBreak(string? task, string? category) =>
+        string.Equals(task?.Trim(), LockIntervalSplit.BreakTaskName, StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(category?.Trim(), LockIntervalSplit.BreakCategory, StringComparison.OrdinalIgnoreCase);
 
     private void RefreshTaskTotals()
     {
@@ -1485,12 +1622,106 @@ public partial class MainWindow : Window
         Activate();
     }
 
-    private void Close_Click(object sender, RoutedEventArgs e) => Close();
+    private void Close_Click(object sender, RoutedEventArgs e)
+    {
+        _closeSource = ExitLog.Reasons.TitleBar;
+        Close();
+    }
+
+    private const int WmQueryEndSession = 0x0011;
+    private const int WmEndSession = 0x0016;
+    private const int WmSysCommand = 0x0112;
+    private const int ScClose = 0xF060;
+    private const long EndSessionLogoff = 0x80000000;
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        HwndSource.FromHwnd(new WindowInteropHelper(this).Handle)?.AddHook(WndProc);
+    }
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        switch (msg)
+        {
+            case WmSysCommand when ((int)wParam.ToInt64() & 0xFFF0) == ScClose:
+                _closeSource ??= Keyboard.IsKeyDown(Key.F4) ? ExitLog.Reasons.AltF4 : ExitLog.Reasons.SystemClose;
+                break;
+            case WmQueryEndSession:
+                _sessionEndQueriedUtc = DateTime.UtcNow;
+                break;
+            case WmEndSession when wParam != IntPtr.Zero:
+                App.BeginProgrammaticExit((lParam.ToInt64() & EndSessionLogoff) != 0
+                    ? ExitLog.Reasons.WindowsLogoff
+                    : ExitLog.Reasons.WindowsShutdown);
+                break;
+        }
+
+        return IntPtr.Zero;
+    }
+
+    /// <summary>
+    /// Asks "Exit Timesheet Buddy?" for a user close (✕, Alt+F4, taskbar). Windows shutdown or sign-out, a
+    /// close request from another PC, a restart and every other shutdown the app starts itself never ask.
+    /// Returns false when the user chose Cancel.
+    /// </summary>
+    private bool ConfirmUserClose()
+    {
+        var source = _closeSource ?? (Keyboard.IsKeyDown(Key.F4) ? ExitLog.Reasons.AltF4 : ExitLog.Reasons.OtherClose);
+        _closeSource = null;
+
+        // Windows asks every window before it ends the session; a close that follows is part of it.
+        if (_sessionEndQueriedUtc is DateTime queried && DateTime.UtcNow - queried < TimeSpan.FromSeconds(30))
+            App.BeginProgrammaticExit(ExitLog.Reasons.WindowsShutdown);
+
+        var shuttingDown = App.IsShuttingDown();
+        if (!ExitPrompt.ShouldAsk(_state.Settings.AskBeforeExit, App.ProgrammaticExitReason, shuttingDown))
+        {
+            if (App.ProgrammaticExitReason is null && !shuttingDown)
+                App.LogExit(ExitLog.UserClose(source, asked: false));
+            return true;
+        }
+
+        var session = _state.ActiveSession;
+        var detail = ExitPrompt.Detail(
+            session is null ? null : _state.ActiveTaskLabel,
+            session is null ? null : DayTotals.FormatCompact(DateTime.UtcNow - session.StartedUtc),
+            _state.IsNoTaskRunning);
+        var dialog = new ExitConfirmWindow(detail);
+        if (WindowState != WindowState.Minimized && IsVisible)
+        {
+            dialog.Owner = this;
+        }
+        else
+        {
+            dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            dialog.Topmost = true;
+        }
+
+        if (dialog.ShowDialog() != true)
+        {
+            App.LogLine(ExitLog.Kinds.Info, $"exit cancelled ({source})");
+            return false;
+        }
+
+        if (dialog.DontAskAgain)
+            _state.SetAskBeforeExit(false);
+        App.LogExit(ExitLog.UserClose(source, asked: true));
+        return true;
+    }
 
     private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.ButtonState == MouseButtonState.Pressed)
+        if (e.ButtonState != MouseButtonState.Pressed)
+            return;
+        try
+        {
             DragMove();
+        }
+        catch (InvalidOperationException)
+        {
+            // The button was released (quick touchpad tap, a dialog opening) before the drag began.
+        }
     }
 
     private void Window_LocationChanged(object? sender, EventArgs e)
@@ -1509,6 +1740,14 @@ public partial class MainWindow : Window
 
     private void Window_Closing(object? sender, CancelEventArgs e)
     {
+        if (_closing)
+            return;
+        if (!ConfirmUserClose())
+        {
+            e.Cancel = true;
+            return;
+        }
+
         _closing = true;
         _lockWatcher.Dispose();
 
@@ -1523,13 +1762,30 @@ public partial class MainWindow : Window
 
         // A normal close finishes a running timer onto today's list and closes any running
         // No Task Selected time into pending, without starting new idle time. Neither
-        // resumes on the next launch.
-        _state.StopAllForShutdown();
-        _scheduler.OnSessionChanged();
-        App.AppTracker.Stop();
+        // resumes on the next launch. A failed save (OneDrive lock, unplugged drive) must not
+        // abort the close half-way, with the widget and lock watcher already gone.
+        try
+        {
+            _state.StopAllForShutdown();
+            _scheduler.OnSessionChanged();
+        }
+        catch (Exception ex)
+        {
+            App.WriteCrashLog(ex);
+            App.LogLine(ExitLog.Kinds.Error, $"saving on exit failed: {ex.GetType().Name}: {ex.Message}");
+        }
 
-        SavePlacement();
-        _state.Persist();
+        try
+        {
+            App.AppTracker.Stop();
+            SavePlacement();
+            _state.Persist();
+        }
+        catch (Exception ex)
+        {
+            App.WriteCrashLog(ex);
+            App.LogLine(ExitLog.Kinds.Error, $"saving on exit failed: {ex.GetType().Name}: {ex.Message}");
+        }
     }
 }
 

@@ -29,6 +29,7 @@ public partial class SettingsWindow : Window
         CategoriesBox.Text = string.Join(Environment.NewLine, state.Categories);
 
         AlwaysOnTopCheck.IsChecked = state.Settings.AlwaysOnTop;
+        AskBeforeExitCheck.IsChecked = state.Settings.AskBeforeExit;
         WidgetEnableRadio.IsChecked = state.Settings.ShowTimerWidget;
         WidgetDisableRadio.IsChecked = !state.Settings.ShowTimerWidget;
         WidgetCoveredCheck.IsChecked = state.Settings.ShowTimerWidgetWhenCovered;
@@ -361,6 +362,7 @@ public partial class SettingsWindow : Window
             WidgetDisableRadio.IsChecked != true,
             WidgetCoveredCheck.IsChecked == true,
             WidgetOtherMonitorCheck.IsChecked == true);
+        App.State.SetAskBeforeExit(AskBeforeExitCheck.IsChecked == true);
         if ((AppTrackCheck.IsChecked == true) != App.State.Settings.AppTrackEnabled)
             App.SetAppTrack(AppTrackCheck.IsChecked == true);
 

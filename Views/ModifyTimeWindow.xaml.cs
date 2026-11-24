@@ -33,7 +33,30 @@ public partial class ModifyTimeWindow : Window
         };
     }
 
+    /// <summary>
+    /// Discard on the No Task Selected row: remove only, prefilled with all of the day's idle time.
+    /// OK on the untouched prefill discards all of it (<see cref="IsRemoveAll"/>).
+    /// </summary>
+    public static ModifyTimeWindow ForNoTaskDiscard(TimeSpan available)
+    {
+        var window = new ModifyTimeWindow(NoTaskTime.Label, "Not logged anywhere; not part of Total", available, available,
+            startWithRemove: true);
+        window._noTaskDiscard = true;
+        window.Title = "Discard time";
+        window.TaskLabel.Text = $"Discard {NoTaskTime.Label} time";
+        window.AddRadio.Visibility = Visibility.Collapsed;
+        window.RemoveRadio.Content = "Discard time";
+        window.RemoveHint.Text = $"Up to {DayTotals.FormatCompact(available)} can be discarded, newest first. " +
+                                 "Discarded time is gone; it is not added to any task.";
+        return window;
+    }
+
+    private bool _noTaskDiscard;
+
     public bool IsRemove { get; private set; }
+
+    /// <summary>Remove with the untouched prefill: all of the removable time, seconds included.</summary>
+    public bool IsRemoveAll { get; private set; }
 
     public TimeSpan SelectedDuration { get; private set; } = TimeSpan.FromMinutes(1);
 
@@ -123,8 +146,7 @@ public partial class ModifyTimeWindow : Window
         var remove = RemoveRadio.IsChecked == true;
         if (remove && _removable <= TimeSpan.Zero)
         {
-            MessageBox.Show(this, RowTimeEdit.OverRemovalMessage(_removable), "Modify time",
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(this, OverMessage(), Title, MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
@@ -134,23 +156,27 @@ public partial class ModifyTimeWindow : Window
             : TimeSpan.FromHours(Hours) + TimeSpan.FromMinutes(Minutes);
         if (!removeAll && duration < TimeSpan.FromMinutes(1))
         {
-            MessageBox.Show(this, "Enter at least 1 minute.", "Modify time",
+            MessageBox.Show(this, "Enter at least 1 minute.", Title,
                 MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
         if (remove && duration > _removable)
         {
-            MessageBox.Show(this, RowTimeEdit.OverRemovalMessage(_removable), "Modify time",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, OverMessage(), Title, MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
         IsRemove = remove;
+        IsRemoveAll = removeAll;
         SelectedDuration = duration;
         DialogResult = true;
         Close();
     }
+
+    private string OverMessage() => _noTaskDiscard
+        ? NoTaskTime.OverDiscardMessage(_removable)
+        : RowTimeEdit.OverRemovalMessage(_removable);
 
     private void Cancel_Click(object sender, RoutedEventArgs e)
     {

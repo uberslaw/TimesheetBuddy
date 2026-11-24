@@ -25,6 +25,9 @@ public sealed class AppSettings
     /// <summary>App Track: log time per foreground program (name only) to app-usage-*.json. Off by default.</summary>
     public bool AppTrackEnabled { get; set; }
 
+    /// <summary>Confirm before a user close (✕, Alt+F4, taskbar). Never asked for Windows shutdown or the app's own exits.</summary>
+    public bool AskBeforeExit { get; set; } = true;
+
     public List<JobCode> JobCodes { get; set; } = [];
     public List<FavoriteTask> FavoriteTasks { get; set; } = [];
     public List<string> Categories { get; set; } =

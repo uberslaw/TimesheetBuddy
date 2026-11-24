@@ -11,7 +11,9 @@ namespace TimesheetBuddy.Services;
 /// <see cref="UnassignedSegment"/>s, stored apart from the time entries, so no total, list,
 /// week summary or export counts them until they are assigned. Open time is the pending
 /// segments (plus the running run once it reaches a minute) minus anything an entry already
-/// covers; assignments are placed inside it latest first and then removed from it.
+/// covers; assignments are placed inside it latest first and then removed from it. The
+/// Today-by-task No Task Selected row moves or discards a whole day's open time the same way
+/// (<see cref="MoveDay"/>, <see cref="DiscardFromDay"/>), so both paths read and shrink one store.
 /// </remarks>
 public static class NoTaskTime
 {
@@ -106,8 +108,7 @@ public static class NoTaskTime
     /// <summary>The part of <paramref name="spans"/> on a local calendar day.</summary>
     public static TimeSpan TotalForDay(IEnumerable<UtcInterval> spans, DateTime dayLocal)
     {
-        var dayStart = DateTime.SpecifyKind(dayLocal.Date, DateTimeKind.Local).ToUniversalTime();
-        var dayEnd = DateTime.SpecifyKind(dayLocal.Date.AddDays(1), DateTimeKind.Local).ToUniversalTime();
+        var (dayStart, dayEnd) = DayBounds(dayLocal);
         var total = TimeSpan.Zero;
         foreach (var span in spans)
         {
@@ -171,6 +172,182 @@ public static class NoTaskTime
             .Select(span => new UnassignedSegment { StartUtc = span.StartUtc, EndUtc = span.EndUtc })
             .ToList();
     }
+
+    /// <summary>Where the Today-by-task No Task Selected row's time goes on Move Time….</summary>
+    public sealed record MoveTarget(string TaskName, string Category, Guid? JobCodeId, string JobCodeText, string Ticket = "");
+
+    public sealed class DayEditResult
+    {
+        public bool Applied { get; init; }
+        public string? Error { get; init; }
+        public List<UnassignedSegment> Pending { get; init; } = [];
+        public DateTime? RunningStartUtc { get; init; }
+        public List<TimeEntry> Added { get; init; } = [];
+        public TimeSpan Amount { get; init; }
+    }
+
+    public const string MovedNote = "Moved from No Task Selected";
+
+    /// <summary>
+    /// The No Task Selected time the Today-by-task row shows for a day: pending plus the running run
+    /// from its first second, minus anything an entry covers, clipped to that local day.
+    /// </summary>
+    public static List<UtcInterval> ForDay(
+        IEnumerable<UnassignedSegment>? pending,
+        DateTime? runningStartUtc,
+        IEnumerable<TimeEntry>? entries,
+        DateTime dayLocal,
+        DateTime nowUtc) =>
+        ClipToDay(Open(pending, runningStartUtc, entries, nowUtc, includeShortRun: true), dayLocal);
+
+    public static List<UtcInterval> ClipToDay(IEnumerable<UtcInterval> spans, DateTime dayLocal)
+    {
+        var (dayStart, dayEnd) = DayBounds(dayLocal);
+        var clipped = new List<UtcInterval>();
+        foreach (var span in spans)
+        {
+            var start = span.StartUtc > dayStart ? span.StartUtc : dayStart;
+            var end = span.EndUtc < dayEnd ? span.EndUtc : dayEnd;
+            if (end > start)
+                clipped.Add(new UtcInterval(start, end));
+        }
+
+        return clipped;
+    }
+
+    /// <summary>
+    /// Move Time… on the No Task Selected row: every open span of the day becomes a finished entry for
+    /// <paramref name="target"/> with the span's own start and end, and that time leaves pending. A
+    /// running run on the day is closed at now for this (whatever its length) and restarts from now, so
+    /// the same seconds can never be assigned again by the interval prompt.
+    /// </summary>
+    public static DayEditResult MoveDay(
+        IEnumerable<UnassignedSegment>? pending,
+        DateTime? runningStartUtc,
+        IEnumerable<TimeEntry> entries,
+        DateTime dayLocal,
+        DateTime nowUtc,
+        MoveTarget target)
+    {
+        var now = AsUtc(nowUtc);
+        var logged = entries.ToList();
+        var spans = ForDay(pending, runningStartUtc, logged, dayLocal, now);
+        var total = Total(spans);
+        if (total <= TimeSpan.Zero)
+            return new DayEditResult { Error = $"There is no {Label} time on this day to move." };
+
+        var name = string.IsNullOrWhiteSpace(target.TaskName) ? "Untitled task" : target.TaskName.Trim();
+        var category = string.IsNullOrWhiteSpace(target.Category) ? "General" : target.Category.Trim();
+        var (folded, running) = FoldRunning(pending, runningStartUtc, dayLocal, now);
+        var added = spans
+            .Select(s => new TimeEntry
+            {
+                StartUtc = s.StartUtc,
+                EndUtc = s.EndUtc,
+                TaskName = name,
+                Category = category,
+                JobCodeId = target.JobCodeId,
+                JobCodeText = target.JobCodeText?.Trim() ?? string.Empty,
+                Ticket = TicketRules.Normalize(target.Ticket),
+                Notes = MovedNote,
+                Source = AssignedSource
+            })
+            .ToList();
+
+        return new DayEditResult
+        {
+            Applied = true,
+            Pending = Remaining(folded, logged.Concat(added), now),
+            RunningStartUtc = running,
+            Added = added,
+            Amount = total
+        };
+    }
+
+    /// <summary>
+    /// Discard on the No Task Selected row: drops <paramref name="amount"/> of the day's open time, newest
+    /// first (null = all of it). Nothing is logged. More than the day holds is refused, never capped.
+    /// </summary>
+    public static DayEditResult DiscardFromDay(
+        IEnumerable<UnassignedSegment>? pending,
+        DateTime? runningStartUtc,
+        IEnumerable<TimeEntry> entries,
+        DateTime dayLocal,
+        DateTime nowUtc,
+        TimeSpan? amount)
+    {
+        var now = AsUtc(nowUtc);
+        var logged = entries.ToList();
+        var spans = ForDay(pending, runningStartUtc, logged, dayLocal, now);
+        var available = Total(spans);
+        if (available <= TimeSpan.Zero)
+            return new DayEditResult { Error = $"There is no {Label} time on this day to discard." };
+
+        var take = amount ?? available;
+        if (take <= TimeSpan.Zero)
+            return new DayEditResult { Error = "Enter at least 1 minute to discard." };
+        if (take > available)
+            return new DayEditResult { Error = OverDiscardMessage(available) };
+
+        var drop = new List<UtcInterval>();
+        var left = take;
+        for (var i = spans.Count - 1; i >= 0 && left > TimeSpan.Zero; i--)
+        {
+            var span = spans[i];
+            var cut = left < span.Duration ? left : span.Duration;
+            drop.Add(new UtcInterval(span.EndUtc - cut, span.EndUtc));
+            left -= cut;
+        }
+
+        var (folded, running) = FoldRunning(pending, runningStartUtc, dayLocal, now);
+        var kept = Subtract(Merge(Spans(folded, null, now)), Merge(drop))
+            .Select(s => new UnassignedSegment { StartUtc = s.StartUtc, EndUtc = s.EndUtc });
+
+        return new DayEditResult
+        {
+            Applied = true,
+            Pending = Remaining(kept, logged, now),
+            RunningStartUtc = running,
+            Amount = take
+        };
+    }
+
+    public static string OverDiscardMessage(TimeSpan available)
+    {
+        var wholeMinutes = (int)Math.Floor(available.TotalMinutes);
+        return $"You can discard at most {DayTotals.FormatCompact(available)} of {Label} time on this day " +
+               $"({wholeMinutes / 60} h {wholeMinutes % 60} min in whole minutes).";
+    }
+
+    /// <summary>
+    /// A copy of pending with a running run that touches the day closed at now (no 1-minute rule), and
+    /// the running start to keep: now when it was folded, otherwise unchanged.
+    /// </summary>
+    private static (List<UnassignedSegment> Pending, DateTime? RunningStartUtc) FoldRunning(
+        IEnumerable<UnassignedSegment>? pending,
+        DateTime? runningStartUtc,
+        DateTime dayLocal,
+        DateTime now)
+    {
+        var copy = (pending ?? [])
+            .Where(s => s is not null)
+            .Select(s => new UnassignedSegment { StartUtc = AsUtc(s.StartUtc), EndUtc = AsUtc(s.EndUtc) })
+            .ToList();
+        if (runningStartUtc is not DateTime running)
+            return (copy, null);
+
+        var start = AsUtc(running);
+        var (dayStart, dayEnd) = DayBounds(dayLocal);
+        if (now <= start || start >= dayEnd || now <= dayStart)
+            return (copy, start);
+
+        copy.Add(new UnassignedSegment { StartUtc = start, EndUtc = now });
+        return (copy, now);
+    }
+
+    private static (DateTime Start, DateTime End) DayBounds(DateTime dayLocal) =>
+        (DateTime.SpecifyKind(dayLocal.Date, DateTimeKind.Local).ToUniversalTime(),
+         DateTime.SpecifyKind(dayLocal.Date.AddDays(1), DateTimeKind.Local).ToUniversalTime());
 
     private static List<UtcInterval> Merge(List<UtcInterval> spans)
     {

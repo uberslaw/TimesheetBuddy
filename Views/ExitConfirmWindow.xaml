@@ -1,0 +1,29 @@
+<Window x:Class="TimesheetBuddy.Views.ExitConfirmWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Timesheet Buddy"
+        Icon="/Assets/TimesheetBuddy.ico"
+        SizeToContent="Height" Width="360"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Background="{StaticResource BgBrush}">
+    <DockPanel Margin="16">
+        <DockPanel DockPanel.Dock="Bottom" Margin="0,16,0,0">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button x:Name="ExitButton" Style="{StaticResource CompactButton}" Content="Exit" Width="80"
+                        Margin="0,0,8,0" Click="Exit_Click"/>
+                <Button x:Name="CancelButton" Style="{StaticResource PrimaryButton}" Content="Cancel" Width="80"
+                        IsDefault="True" IsCancel="True" Click="Cancel_Click"/>
+            </StackPanel>
+            <CheckBox x:Name="DontAskCheck" Content="Don't ask again" VerticalAlignment="Center"
+                      ToolTip="Turn it back on in Settings → Prompts &amp; pin → Ask before exiting"/>
+        </DockPanel>
+
+        <StackPanel>
+            <TextBlock x:Name="QuestionText" FontWeight="SemiBold" FontSize="14" Text="Exit Timesheet Buddy?"/>
+            <TextBlock x:Name="DetailText" Foreground="{StaticResource MutedBrush}" FontSize="11"
+                       TextWrapping="Wrap" Margin="0,6,0,0"/>
+        </StackPanel>
+    </DockPanel>
+</Window>

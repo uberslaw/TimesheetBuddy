@@ -124,6 +124,7 @@ public partial class App
     {
         if (ClosingWithoutSave) return;
         ClosingWithoutSave = true;
+        BeginProgrammaticExit("close request from another PC: " + journalSummary);
         Store.Suspend();
         State.LogOverlap(journalSummary);
         Presence?.Stop(deleteFile: true);
@@ -133,6 +134,7 @@ public partial class App
         var fallback = new Thread(() =>
         {
             Thread.Sleep(delay + PresenceTiming.ForcedExitFallback);
+            LogLine(ExitLog.Kinds.Info, "close request: shutdown had not finished, process ended by the fallback timer");
             Environment.Exit(0);
         })
         { IsBackground = true, Name = "Timesheet Buddy forced exit" };

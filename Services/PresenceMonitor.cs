@@ -18,6 +18,7 @@ public sealed class PresenceMonitor
     private readonly DateTime _processStartUtc;
     private readonly HashSet<string> _dismissed = [];
     private readonly HashSet<string> _announced = [];
+    private readonly HashSet<string> _pullErrors = [];
     private DateTime? _confirmedAtUtc;
     private CloseRequest? _request;
     private bool _stopped;
@@ -70,9 +71,12 @@ public sealed class PresenceMonitor
             {
                 _state.SyncFromDisk();
             }
-            catch
+            catch (Exception ex)
             {
                 // The save path merges again; a failed pull only delays showing the other PC's entries.
+                // Logged once per kind of failure: this runs every 20 s.
+                if (_pullErrors.Add($"{ex.GetType().FullName}: {ex.Message}"))
+                    App.WriteCrashLog(ex);
             }
 
             var others = SessionFiles.ReadOthers(_folder(), _client.ClientId);
