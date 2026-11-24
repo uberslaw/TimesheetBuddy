@@ -35,6 +35,8 @@ public partial class MainWindow : Window
     private string? _lastTicketPrefix;
     private bool _positionDirty;
     private bool _closing;
+    private string? _closeSource;
+    private DateTime? _sessionEndQueriedUtc;
 
     public MainWindow()
     {
@@ -1620,7 +1622,93 @@ public partial class MainWindow : Window
         Activate();
     }
 
-    private void Close_Click(object sender, RoutedEventArgs e) => Close();
+    private void Close_Click(object sender, RoutedEventArgs e)
+    {
+        _closeSource = ExitLog.Reasons.TitleBar;
+        Close();
+    }
+
+    private const int WmQueryEndSession = 0x0011;
+    private const int WmEndSession = 0x0016;
+    private const int WmSysCommand = 0x0112;
+    private const int ScClose = 0xF060;
+    private const long EndSessionLogoff = 0x80000000;
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        HwndSource.FromHwnd(new WindowInteropHelper(this).Handle)?.AddHook(WndProc);
+    }
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        switch (msg)
+        {
+            case WmSysCommand when ((int)wParam.ToInt64() & 0xFFF0) == ScClose:
+                _closeSource ??= Keyboard.IsKeyDown(Key.F4) ? ExitLog.Reasons.AltF4 : ExitLog.Reasons.SystemClose;
+                break;
+            case WmQueryEndSession:
+                _sessionEndQueriedUtc = DateTime.UtcNow;
+                break;
+            case WmEndSession when wParam != IntPtr.Zero:
+                App.BeginProgrammaticExit((lParam.ToInt64() & EndSessionLogoff) != 0
+                    ? ExitLog.Reasons.WindowsLogoff
+                    : ExitLog.Reasons.WindowsShutdown);
+                break;
+        }
+
+        return IntPtr.Zero;
+    }
+
+    /// <summary>
+    /// Asks "Exit Timesheet Buddy?" for a user close (✕, Alt+F4, taskbar). Windows shutdown or sign-out, a
+    /// close request from another PC, a restart and every other shutdown the app starts itself never ask.
+    /// Returns false when the user chose Cancel.
+    /// </summary>
+    private bool ConfirmUserClose()
+    {
+        var source = _closeSource ?? (Keyboard.IsKeyDown(Key.F4) ? ExitLog.Reasons.AltF4 : ExitLog.Reasons.OtherClose);
+        _closeSource = null;
+
+        // Windows asks every window before it ends the session; a close that follows is part of it.
+        if (_sessionEndQueriedUtc is DateTime queried && DateTime.UtcNow - queried < TimeSpan.FromSeconds(30))
+            App.BeginProgrammaticExit(ExitLog.Reasons.WindowsShutdown);
+
+        var shuttingDown = App.IsShuttingDown();
+        if (!ExitPrompt.ShouldAsk(_state.Settings.AskBeforeExit, App.ProgrammaticExitReason, shuttingDown))
+        {
+            if (App.ProgrammaticExitReason is null && !shuttingDown)
+                App.LogExit(ExitLog.UserClose(source, asked: false));
+            return true;
+        }
+
+        var session = _state.ActiveSession;
+        var detail = ExitPrompt.Detail(
+            session is null ? null : _state.ActiveTaskLabel,
+            session is null ? null : DayTotals.FormatCompact(DateTime.UtcNow - session.StartedUtc),
+            _state.IsNoTaskRunning);
+        var dialog = new ExitConfirmWindow(detail);
+        if (WindowState != WindowState.Minimized && IsVisible)
+        {
+            dialog.Owner = this;
+        }
+        else
+        {
+            dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            dialog.Topmost = true;
+        }
+
+        if (dialog.ShowDialog() != true)
+        {
+            App.LogLine(ExitLog.Kinds.Info, $"exit cancelled ({source})");
+            return false;
+        }
+
+        if (dialog.DontAskAgain)
+            _state.SetAskBeforeExit(false);
+        App.LogExit(ExitLog.UserClose(source, asked: true));
+        return true;
+    }
 
     private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
@@ -1644,6 +1732,14 @@ public partial class MainWindow : Window
 
     private void Window_Closing(object? sender, CancelEventArgs e)
     {
+        if (_closing)
+            return;
+        if (!ConfirmUserClose())
+        {
+            e.Cancel = true;
+            return;
+        }
+
         _closing = true;
         _lockWatcher.Dispose();
 

@@ -1082,6 +1082,14 @@ public sealed class AppState : INotifyPropertyChanged
         SettingsChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    public void SetAskBeforeExit(bool ask)
+    {
+        if (_settings.AskBeforeExit == ask)
+            return;
+        _settings.AskBeforeExit = ask;
+        Persist();
+    }
+
     public void SetAppTrackEnabled(bool enabled)
     {
         if (_settings.AppTrackEnabled == enabled)
