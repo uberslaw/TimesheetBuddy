@@ -32,6 +32,10 @@ public partial class App : Application
 
     private static readonly int Pid = Environment.ProcessId;
     private static bool _exitLogged;
+    private static bool _errorDialogOpen;
+    private static string? _lastErrorShown;
+    private static DateTime _lastErrorShownUtc;
+    private static readonly TimeSpan RepeatedErrorQuiet = TimeSpan.FromMinutes(1);
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -115,16 +119,46 @@ public partial class App : Application
 
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
-        WriteCrashLog(e.Exception);
-        var what = $"{e.Exception.GetType().Name}: {e.Exception.Message}";
-        LogLine(ExitLog.Kinds.Error, $"unhandled UI exception, error box shown: {what}");
-        MessageBox.Show(
-            "Timesheet Buddy hit an unexpected error.\n\n" + e.Exception.Message +
-            "\n\nDetails were written to:\n" + CrashLogPath,
-            "Timesheet Buddy",
-            MessageBoxButton.OK,
-            MessageBoxImage.Error);
         e.Handled = true;
+        var what = $"{e.Exception.GetType().Name}: {e.Exception.Message}";
+        var now = DateTime.UtcNow;
+        var repeat = what == _lastErrorShown && (_errorDialogOpen || now - _lastErrorShownUtc < RepeatedErrorQuiet);
+        if (!repeat)
+            WriteCrashLog(e.Exception);
+
+        // A timer that throws every tick would otherwise stack a new modal box (and a nested message loop)
+        // on each tick until the stack overflows, which ends the process without any log.
+        if (_errorDialogOpen)
+        {
+            LogLine(ExitLog.Kinds.Error, $"while the error box was open: {what}");
+            return;
+        }
+
+        // The same error from a one-second tick would reopen the box as soon as it is closed.
+        if (repeat)
+        {
+            LogLine(ExitLog.Kinds.Error, $"repeated within a minute, no box: {what}");
+            return;
+        }
+
+        LogLine(ExitLog.Kinds.Error, $"unhandled UI exception, error box shown: {what}");
+        _lastErrorShown = what;
+        _lastErrorShownUtc = now;
+        _errorDialogOpen = true;
+        try
+        {
+            MessageBox.Show(
+                "Timesheet Buddy hit an unexpected error.\n\n" + e.Exception.Message +
+                "\n\nDetails were written to:\n" + CrashLogPath,
+                "Timesheet Buddy",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+        finally
+        {
+            _errorDialogOpen = false;
+        }
+
         if (Windows.Count == 0)
         {
             BeginProgrammaticExit($"unhandled UI exception with no window left: {what}");
@@ -142,9 +176,16 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        if (!ClosingWithoutSave)
-            AppTracker?.Stop();
-        Presence?.Stop(deleteFile: true);
+        try
+        {
+            if (!ClosingWithoutSave)
+                AppTracker?.Stop();
+            Presence?.Stop(deleteFile: true);
+        }
+        catch (Exception ex)
+        {
+            WriteCrashLog(ex);
+        }
 
         LogExit(ProgrammaticExitReason ?? ExitLog.Reasons.UnknownShutdown);
         LogLine(ExitLog.Kinds.Info, $"exit code {e.ApplicationExitCode}");

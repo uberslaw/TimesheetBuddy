@@ -1712,8 +1712,16 @@ public partial class MainWindow : Window
 
     private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.ButtonState == MouseButtonState.Pressed)
+        if (e.ButtonState != MouseButtonState.Pressed)
+            return;
+        try
+        {
             DragMove();
+        }
+        catch (InvalidOperationException)
+        {
+            // The button was released (quick touchpad tap, a dialog opening) before the drag began.
+        }
     }
 
     private void Window_LocationChanged(object? sender, EventArgs e)
@@ -1754,13 +1762,30 @@ public partial class MainWindow : Window
 
         // A normal close finishes a running timer onto today's list and closes any running
         // No Task Selected time into pending, without starting new idle time. Neither
-        // resumes on the next launch.
-        _state.StopAllForShutdown();
-        _scheduler.OnSessionChanged();
-        App.AppTracker.Stop();
+        // resumes on the next launch. A failed save (OneDrive lock, unplugged drive) must not
+        // abort the close half-way, with the widget and lock watcher already gone.
+        try
+        {
+            _state.StopAllForShutdown();
+            _scheduler.OnSessionChanged();
+        }
+        catch (Exception ex)
+        {
+            App.WriteCrashLog(ex);
+            App.LogLine(ExitLog.Kinds.Error, $"saving on exit failed: {ex.GetType().Name}: {ex.Message}");
+        }
 
-        SavePlacement();
-        _state.Persist();
+        try
+        {
+            App.AppTracker.Stop();
+            SavePlacement();
+            _state.Persist();
+        }
+        catch (Exception ex)
+        {
+            App.WriteCrashLog(ex);
+            App.LogLine(ExitLog.Kinds.Error, $"saving on exit failed: {ex.GetType().Name}: {ex.Message}");
+        }
     }
 }
 
